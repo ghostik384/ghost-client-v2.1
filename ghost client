@@ -1,10 +1,12 @@
--- Ghost Client V2.0 - Single GUI
+-- Ghost Client V2.0 - Single GUI with Working Hitbox Slider, ESP & Hitbox Visuals
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
 
 -- Створюємо ScreenGui
 local gui = Instance.new("ScreenGui")
@@ -25,7 +27,7 @@ frame.Active = true
 frame.Draggable = true
 frame.Parent = gui
 
--- Контейнер для контенту (те що буде згортатись)
+-- Контейнер для контенту
 local contentFrame = Instance.new("Frame")
 contentFrame.Size = UDim2.new(1, 0, 1, -42)
 contentFrame.Position = UDim2.new(0, 0, 0, 42)
@@ -45,18 +47,18 @@ local showHitboxes = false
 local wallhackEnabled = false
 local seeHitboxesThroughWalls = false
 
+-- Таблиці для зберігання ESP об'єктів
+local espObjects = {}
+local hitboxVisuals = {}
+
 -- Функція анімації згортання
 local function collapseGUI()
     if isAnimating or not isOpen then return end
     isAnimating = true
     isOpen = false
     
-    local originalHeight = 380
-    local targetHeight = 42
-    
     for i = 0, 1, 0.05 do
-        local currentHeight = originalHeight + (targetHeight - originalHeight) * i
-        frame.Size = UDim2.new(0, 380, 0, currentHeight)
+        frame.Size = UDim2.new(0, 380, 0, 380 + (42 - 380) * i)
         contentFrame.BackgroundTransparency = i
         task.wait(0.01)
     end
@@ -72,12 +74,8 @@ local function expandGUI()
     isAnimating = true
     
     contentFrame.Visible = true
-    local startHeight = 42
-    local targetHeight = 380
-    
     for i = 0, 1, 0.05 do
-        local currentHeight = startHeight + (targetHeight - startHeight) * i
-        frame.Size = UDim2.new(0, 380, 0, currentHeight)
+        frame.Size = UDim2.new(0, 380, 0, 42 + (380 - 42) * i)
         contentFrame.BackgroundTransparency = 1 - i
         task.wait(0.01)
     end
@@ -87,6 +85,156 @@ local function expandGUI()
     isOpen = true
     isAnimating = false
 end
+
+-- Створення ESP для гравця
+local function createESP(targetPlayer)
+    local espFolder = Instance.new("Folder")
+    espFolder.Name = targetPlayer.Name
+    
+    -- Box ESP
+    local box = Instance.new("BoxHandleAdornment")
+    box.Name = "ESPBox"
+    box.Size = Vector3.new(2, 3, 1)
+    box.Color3 = Color3.fromRGB(255, 0, 0)
+    box.Transparency = 0.5
+    box.AlwaysOnTop = true
+    box.ZIndex = 5
+    box.Adornee = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    box.Visible = wallhackEnabled
+    box.Parent = espFolder
+    
+    -- Name ESP
+    local nameTag = Instance.new("BillboardGui")
+    nameTag.Name = "ESPName"
+    nameTag.Size = UDim2.new(0, 100, 0, 30)
+    nameTag.StudsOffset = Vector3.new(0, 3.5, 0)
+    nameTag.AlwaysOnTop = true
+    nameTag.Adornee = targetPlayer.Character and targetPlayer.Character:FindFirstChild("Head")
+    nameTag.Enabled = wallhackEnabled
+    nameTag.Parent = espFolder
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = targetPlayer.Name
+    nameLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    nameLabel.TextScaled = true
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Parent = nameTag
+    
+    -- Hitbox Visual
+    local hitbox = Instance.new("BoxHandleAdornment")
+    hitbox.Name = "HitboxVisual"
+    hitbox.Size = Vector3.new(2, 3, 1)
+    hitbox.Color3 = Color3.fromRGB(0, 255, 255)
+    hitbox.Transparency = 0.7
+    hitbox.AlwaysOnTop = seeHitboxesThroughWalls
+    hitbox.ZIndex = 4
+    hitbox.Adornee = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    hitbox.Visible = false
+    hitbox.Parent = espFolder
+    
+    espObjects[targetPlayer] = espFolder
+    espFolder.Parent = gui
+    
+    return espFolder
+end
+
+-- Оновлення розміру хітбокса
+local function updateHitboxSize()
+    for targetPlayer, folder in pairs(espObjects) do
+        local hitbox = folder:FindFirstChild("HitboxVisual")
+        if hitbox then
+            hitbox.Size = Vector3.new(2 * hitboxMultiplier, 3 * hitboxMultiplier, 1 * hitboxMultiplier)
+            hitbox.Color3 = Color3.fromRGB(
+                math.clamp(255 * (hitboxMultiplier - 1), 0, 255),
+                255,
+                math.clamp(255 * (3 - hitboxMultiplier), 0, 255)
+            )
+        end
+    end
+end
+
+-- Оновлення ESP видимості
+local function updateESPVisibility()
+    for targetPlayer, folder in pairs(espObjects) do
+        local box = folder:FindFirstChild("ESPBox")
+        local nameTag = folder:FindFirstChild("ESPName")
+        
+        if box then
+            box.Visible = wallhackEnabled
+        end
+        if nameTag then
+            nameTag.Enabled = wallhackEnabled
+        end
+    end
+end
+
+-- Оновлення видимості хітбоксів
+local function updateHitboxVisibility()
+    for targetPlayer, folder in pairs(espObjects) do
+        local hitbox = folder:FindFirstChild("HitboxVisual")
+        if hitbox then
+            hitbox.Visible = showHitboxes
+            hitbox.AlwaysOnTop = seeHitboxesThroughWalls
+        end
+    end
+end
+
+-- Оновлення ESP позицій
+local function updateESPPositions()
+    for targetPlayer, folder in pairs(espObjects) do
+        if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local box = folder:FindFirstChild("ESPBox")
+            local nameTag = folder:FindFirstChild("ESPName")
+            local hitbox = folder:FindFirstChild("HitboxVisual")
+            
+            if box then
+                box.Adornee = targetPlayer.Character.HumanoidRootPart
+            end
+            if nameTag then
+                nameTag.Adornee = targetPlayer.Character:FindFirstChild("Head")
+            end
+            if hitbox then
+                hitbox.Adornee = targetPlayer.Character.HumanoidRootPart
+            end
+        end
+    end
+end
+
+-- Очищення ESP для гравця
+local function removeESP(targetPlayer)
+    if espObjects[targetPlayer] then
+        espObjects[targetPlayer]:Destroy()
+        espObjects[targetPlayer] = nil
+    end
+end
+
+-- Відстеження гравців
+local function onPlayerAdded(newPlayer)
+    if newPlayer ~= player then
+        createESP(newPlayer)
+    end
+end
+
+local function onPlayerRemoving(leavingPlayer)
+    removeESP(leavingPlayer)
+end
+
+-- Додаємо існуючих гравців
+for _, existingPlayer in ipairs(Players:GetPlayers()) do
+    if existingPlayer ~= player then
+        createESP(existingPlayer)
+    end
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+
+-- Оновлення ESP кожен кадр
+RunService.RenderStepped:Connect(function()
+    updateESPPositions()
+end)
 
 -- Верхня панель
 local topBar = Instance.new("Frame")
@@ -140,7 +288,7 @@ lockBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Кнопка закриття (X)
+-- Кнопка закриття
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0, 35, 0, 35)
 closeBtn.Position = UDim2.new(1, -35, 0, 2.5)
@@ -164,7 +312,7 @@ line.BackgroundColor3 = Color3.fromRGB(255, 0, 100)
 line.BorderSizePixel = 0
 line.Parent = frame
 
--- Функція створення перемикача (Toggle)
+-- Функція створення перемикача
 local function createToggle(name, text, yPos, defaultState, callback)
     local toggleFrame = Instance.new("Frame")
     toggleFrame.Size = UDim2.new(0.8, 0, 0, 38)
@@ -209,19 +357,19 @@ end
 -- Hitbox View Toggle
 createToggle("HitboxView", "Hitbox View", 10, false, function(state)
     showHitboxes = state
-    print("Hitbox View: " .. tostring(state))
+    updateHitboxVisibility()
 end)
 
 -- Wallhack Toggle
 createToggle("Wallhack", "Wallhack (See Through Walls)", 55, false, function(state)
     wallhackEnabled = state
-    print("Wallhack: " .. tostring(state))
+    updateESPVisibility()
 end)
 
 -- See Hitboxes Through Walls Toggle
 createToggle("SeeHitboxesThroughWalls", "See Hitboxes Through Walls", 100, false, function(state)
     seeHitboxesThroughWalls = state
-    print("See Hitboxes Through Walls: " .. tostring(state))
+    updateHitboxVisibility()
 end)
 
 -- Hitbox Size Slider
@@ -241,28 +389,6 @@ hitboxLabel.TextXAlignment = Enum.TextXAlignment.Left
 hitboxLabel.TextScaled = true
 hitboxLabel.Font = Enum.Font.Gotham
 hitboxLabel.Parent = hitboxFrame
-
--- Мітки для розмірів
-local marksContainer = Instance.new("Frame")
-marksContainer.Size = UDim2.new(1, 0, 0.2, 0)
-marksContainer.Position = UDim2.new(0, 0, 0.3, 0)
-marksContainer.BackgroundTransparency = 1
-marksContainer.Parent = hitboxFrame
-
-local marks = {"1x", "1.5x", "2x", "2.5x"}
-local markPositions = {0, 0.33, 0.66, 0.93}
-
-for i, mark in ipairs(marks) do
-    local markLabel = Instance.new("TextLabel")
-    markLabel.Size = UDim2.new(0.12, 0, 1, 0)
-    markLabel.Position = UDim2.new(markPositions[i], 0, 0, 0)
-    markLabel.BackgroundTransparency = 1
-    markLabel.Text = mark
-    markLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-    markLabel.TextScaled = true
-    markLabel.Font = Enum.Font.Gotham
-    markLabel.Parent = marksContainer
-end
 
 local hitboxSlider = Instance.new("TextButton")
 hitboxSlider.Size = UDim2.new(1, 0, 0.25, 0)
@@ -286,7 +412,7 @@ local function updateHitbox(value)
     sliderFill.Size = UDim2.new(norm, 0, 1, 0)
     hitboxLabel.Text = "Hitbox Size: " .. string.format("%.1f", value) .. "x"
     hitboxMultiplier = value
-    print("Hitbox size set to: " .. string.format("%.1f", value) .. "x")
+    updateHitboxSize()
 end
 
 -- Логіка перетягування слайдера
@@ -295,7 +421,6 @@ local hitboxDrag = false
 hitboxSlider.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         hitboxDrag = true
-        -- Оновлюємо позицію одразу при кліку
         local mousePos = mouse.X
         local sliderPos = hitboxSlider.AbsolutePosition.X
         local width = hitboxSlider.AbsoluteSize.X
@@ -340,8 +465,9 @@ youtube.TextScaled = true
 youtube.Font = Enum.Font.Gotham
 youtube.Parent = contentFrame
 
+-- Початкове значення хітбокса
 updateHitbox(1.0)
 
 print("Ghost Client V2.0 Loaded!")
-print("Click title to collapse/expand")
-print("Lock button stops GUI from moving")
+print("Features: Wallhack ESP, Hitbox View, Hitbox Size Changer")
+print("Sliders work by clicking and dragging")
