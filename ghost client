@@ -1,4 +1,4 @@
--- Ghost Client V2.0 - Single GUI with Working Hitbox Slider, ESP & Hitbox Visuals
+-- Ghost Client V2.0 - Single GUI with Working Hitbox Slider & ESP
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -49,7 +49,6 @@ local seeHitboxesThroughWalls = false
 
 -- Таблиці для зберігання ESP об'єктів
 local espObjects = {}
-local hitboxVisuals = {}
 
 -- Функція анімації згортання
 local function collapseGUI()
@@ -86,12 +85,40 @@ local function expandGUI()
     isAnimating = false
 end
 
--- Створення ESP для гравця
+-- === СИСТЕМА ХІТБОКСІВ (РОЗШИРЕННЯ ЧАСТИН ТІЛА) ===
+local function setHitboxSize(value)
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("Model") and v:FindFirstChild("Humanoid") and v ~= player.Character then
+            for _, part in ipairs(v:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Size = Vector3.new(value, value, value)
+                end
+            end
+        end
+    end
+end
+
+local function setAllHitboxes()
+    setHitboxSize(hitboxMultiplier)
+end
+
+-- Відстеження нових об'єктів
+Workspace.DescendantAdded:Connect(function(descendant)
+    if descendant:IsA("Model") and descendant:FindFirstChild("Humanoid") then
+        for _, part in ipairs(descendant:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Size = Vector3.new(hitboxMultiplier, hitboxMultiplier, hitboxMultiplier)
+            end
+        end
+    end
+end)
+
+-- === СИСТЕМА ESP (Wallhack + Hitbox View) ===
 local function createESP(targetPlayer)
     local espFolder = Instance.new("Folder")
     espFolder.Name = targetPlayer.Name
     
-    -- Box ESP
+    -- Box ESP (Wallhack)
     local box = Instance.new("BoxHandleAdornment")
     box.Name = "ESPBox"
     box.Size = Vector3.new(2, 3, 1)
@@ -106,7 +133,9 @@ local function createESP(targetPlayer)
     -- Name ESP
     local nameTag = Instance.new("BillboardGui")
     nameTag.Name = "ESPName"
-    nameTag.Size = UDim2.new(0, 100, 0, 30)
+    nameTag.Size = UDim2.
+
+new(0, 100, 0, 30)
     nameTag.StudsOffset = Vector3.new(0, 3.5, 0)
     nameTag.AlwaysOnTop = true
     nameTag.Adornee = targetPlayer.Character and targetPlayer.Character:FindFirstChild("Head")
@@ -138,21 +167,6 @@ local function createESP(targetPlayer)
     espFolder.Parent = gui
     
     return espFolder
-end
-
--- Оновлення розміру хітбокса
-local function updateHitboxSize()
-    for targetPlayer, folder in pairs(espObjects) do
-        local hitbox = folder:FindFirstChild("HitboxVisual")
-        if hitbox then
-            hitbox.Size = Vector3.new(2 * hitboxMultiplier, 3 * hitboxMultiplier, 1 * hitboxMultiplier)
-            hitbox.Color3 = Color3.fromRGB(
-                math.clamp(255 * (hitboxMultiplier - 1), 0, 255),
-                255,
-                math.clamp(255 * (3 - hitboxMultiplier), 0, 255)
-            )
-        end
-    end
 end
 
 -- Оновлення ESP видимості
@@ -254,6 +268,9 @@ title.Text = "GHOST CLIENT V2.0"
 title.TextColor3 = Color3.fromRGB(255, 50, 120)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBold
+title.Active = true
+title.Selectable = true
+
 title.Parent = topBar
 
 title.MouseButton1Click:Connect(function()
@@ -274,6 +291,8 @@ lockBtn.Text = "🔓"
 lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 lockBtn.TextScaled = true
 lockBtn.Font = Enum.Font.GothamBold
+lockBtn.Active = true
+lockBtn.Selectable = true
 lockBtn.Parent = topBar
 
 lockBtn.MouseButton1Click:Connect(function()
@@ -298,9 +317,16 @@ closeBtn.Text = "✕"
 closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 closeBtn.TextScaled = true
 closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Active = true
+closeBtn.Selectable = true
 closeBtn.Parent = topBar
 
 closeBtn.MouseButton1Click:Connect(function()
+    -- Очищаємо ESP перед закриттям
+    for targetPlayer, folder in pairs(espObjects) do
+        folder:Destroy()
+    end
+    espObjects = {}
     gui:Destroy()
 end)
 
@@ -341,6 +367,8 @@ local function createToggle(name, text, yPos, defaultState, callback)
     toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleBtn.TextScaled = true
     toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.Active = true
+    toggleBtn.Selectable = true
     toggleBtn.Parent = toggleFrame
     
     local state = defaultState
@@ -372,13 +400,15 @@ createToggle("SeeHitboxesThroughWalls", "See Hitboxes Through Walls", 100, false
     updateHitboxVisibility()
 end)
 
--- Hitbox Size Slider
+-- === НОВИЙ РОБОЧИЙ СЛАЙДЕР ХІТБОКСІВ ===
 local hitboxFrame = Instance.new("Frame")
+
 hitboxFrame.Size = UDim2.new(0.8, 0, 0, 70)
 hitboxFrame.Position = UDim2.new(0.1, 0, 0, 155)
 hitboxFrame.BackgroundTransparency = 1
 hitboxFrame.Parent = contentFrame
 
+-- Мітка значення
 local hitboxLabel = Instance.new("TextLabel")
 hitboxLabel.Size = UDim2.new(1, 0, 0.25, 0)
 hitboxLabel.Position = UDim2.new(0, 0, 0, 0)
@@ -390,66 +420,123 @@ hitboxLabel.TextScaled = true
 hitboxLabel.Font = Enum.Font.Gotham
 hitboxLabel.Parent = hitboxFrame
 
-local hitboxSlider = Instance.new("TextButton")
-hitboxSlider.Size = UDim2.new(1, 0, 0.25, 0)
-hitboxSlider.Position = UDim2.new(0, 0, 0.55, 0)
-hitboxSlider.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-hitboxSlider.BorderSizePixel = 1
-hitboxSlider.BorderColor3 = Color3.fromRGB(255, 0, 100)
-hitboxSlider.Text = ""
-hitboxSlider.AutoButtonColor = false
-hitboxSlider.Parent = hitboxFrame
+-- Фон слайдера (лінія)
+local sliderBackground = Instance.new("Frame")
+sliderBackground.Size = UDim2.new(1, 0, 0.25, 0)
+sliderBackground.Position = UDim2.new(0, 0, 0.55, 0)
+sliderBackground.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+sliderBackground.BorderSizePixel = 1
+sliderBackground.BorderColor3 = Color3.fromRGB(255, 0, 100)
+sliderBackground.Active = true
+sliderBackground.Selectable = true
+sliderBackground.Parent = hitboxFrame
 
+-- Заповнення слайдера
 local sliderFill = Instance.new("Frame")
 sliderFill.Size = UDim2.new(0, 0, 1, 0)
 sliderFill.BackgroundColor3 = Color3.fromRGB(255, 50, 150)
 sliderFill.BorderSizePixel = 0
-sliderFill.Parent = hitboxSlider
+sliderFill.Parent = sliderBackground
 
-local function updateHitbox(value)
-    local norm = (value - 1) / 1.5
-    norm = math.clamp(norm, 0, 1)
-    sliderFill.Size = UDim2.new(norm, 0, 1, 0)
+-- Кругла ручка слайдера
+local sliderKnob = Instance.new("TextButton")
+sliderKnob.Size = UDim2.new(0, 20, 0, 20)
+sliderKnob.Position = UDim2.new(0, -10, 0.5, -10)
+sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+sliderKnob.BorderSizePixel = 2
+sliderKnob.BorderColor3 = Color3.fromRGB(255, 0, 100)
+sliderKnob.Text = ""
+sliderKnob.AutoButtonColor = false
+sliderKnob.Active = true
+sliderKnob.Selectable = true
+sliderKnob.Parent = sliderBackground
+
+-- Робимо ручку круглою
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1, 0)
+corner.Parent = sliderKnob
+
+-- Функція оновлення слайдера
+local function updateSlider(value)
+    local percent = (value - 1) / 1.5 -- 1 -> 0, 2.5 -> 1
+    percent = math.clamp(percent, 0, 1)
+    
+    sliderFill.Size = UDim2.new(percent, 0, 1, 0)
+    sliderKnob.Position = UDim2.new(percent, -10, 0.5, -10)
     hitboxLabel.Text = "Hitbox Size: " .. string.format("%.1f", value) .. "x"
     hitboxMultiplier = value
-    updateHitboxSize()
+    
+    -- Застосовуємо розмір до хітбоксів
+    setAllHitboxes()
 end
 
--- Логіка перетягування слайдера
-local hitboxDrag = false
+-- Глобальний стан перетягування
+local sliderDragging = false
 
-hitboxSlider.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        hitboxDrag = true
-        local mousePos = mouse.X
-        local sliderPos = hitboxSlider.AbsolutePosition.X
-        local width = hitboxSlider.AbsoluteSize.X
-        local t = math.clamp((mousePos - sliderPos) / width, 0, 1)
-        local multiplier = 1 + (t * 1.5)
-        updateHitbox(multiplier)
+-- Функція розрахунку позиції з координат вводу
+local function getSliderPercent(inputX)
+    local bgPos = sliderBackground.AbsolutePosition.X
+    local bgSize = sliderBackground.AbsoluteSize.X
+    local percent = (inputX - bgPos) / bgSize
+    return math.clamp(percent, 0, 1)
+end
+
+-- Функція застосування процента до значення слайдера
+local function applySliderPercent(percent)
+    local value = 1 + (percent * 1.5)
+    updateSlider(value)
+end
+
+-- === ОБРОБНИКИ ПОДІЙ ДЛЯ СЛАЙДЕРА ===
+
+-- Клік на фон слайдера
+sliderBackground.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = true
+        local percent = getSliderPercent(input.Position.X)
+        applySliderPercent(percent)
     end
 end)
 
-hitboxSlider.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        hitboxDrag = false
+-- Клік на ручку слайдера
+sliderKnob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = true
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        hitboxDrag = false
-    end
-end)
-
+-- Глобальне відстеження руху (працює навіть якщо палець за межами слайдера)
 UserInputService.InputChanged:Connect(function(input)
-    if hitboxDrag and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local mousePos = mouse.X
-        local sliderPos = hitboxSlider.AbsolutePosition.X
-        local width = hitboxSlider.AbsoluteSize.X
-        local t = math.clamp((mousePos - sliderPos) / width, 0, 1)
-        local multiplier = 1 + (t * 1.5)
-        updateHitbox(multiplier)
+    if sliderDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or 
+                           input.UserInputType == Enum.UserInputType.Touch) then
+        local percent = getSliderPercent(input.Position.X)
+        applySliderPercent(percent)
+    end
+end)
+
+-- Завершення перетягування
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = false
+
+end
+end)
+
+-- Додатковий захист від зависання
+sliderBackground.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = false
+    end
+end)
+
+sliderKnob.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = false
     end
 end)
 
@@ -465,9 +552,9 @@ youtube.TextScaled = true
 youtube.Font = Enum.Font.Gotham
 youtube.Parent = contentFrame
 
--- Початкове значення хітбокса
-updateHitbox(1.0)
+-- Початкове значення
+updateSlider(1.0)
 
-print("Ghost Client V2.0 Loaded!")
-print("Features: Wallhack ESP, Hitbox View, Hitbox Size Changer")
-print("Sliders work by clicking and dragging")
+print("Ghost Client V2.0 Loaded Successfully!")
+print("Features: ESP Wallhack, Hitbox View, Hitbox Size Slider")
+print("Slider works on both PC and Mobile!")
