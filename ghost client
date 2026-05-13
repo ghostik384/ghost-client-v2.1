@@ -1,4 +1,4 @@
--- Ghost Client V2.0 - Single GUI with Working Hitbox Slider & ESP
+-- Ghost Client V2.0 - Single GUI with Working Hitbox Size Changer
 
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -49,6 +49,7 @@ local seeHitboxesThroughWalls = false
 
 -- Таблиці для зберігання ESP об'єктів
 local espObjects = {}
+local hitboxConnections = {}
 
 -- Функція анімації згортання
 local function collapseGUI()
@@ -85,32 +86,81 @@ local function expandGUI()
     isAnimating = false
 end
 
--- === СИСТЕМА ХІТБОКСІВ (РОЗШИРЕННЯ ЧАСТИН ТІЛА) ===
-local function setHitboxSize(value)
+-- === СИСТЕМА ХІТБОКСІВ (РОЗШИРЕННЯ HITBOX через BoxHandleAdornment) ===
+
+-- Функція створення/оновлення хітбокса для персонажа
+local function applyHitboxToCharacter(character)
+    if not character or character == player.Character then return end
+    
+    -- Шукаємо або створюємо хітбокс
+    local hitbox = character:FindFirstChild("GhostHitbox")
+    
+    if not hitbox then
+        hitbox = Instance.new("BoxHandleAdornment")
+        hitbox.Name = "GhostHitbox"
+        hitbox.Adornee = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head")
+        hitbox.AlwaysOnTop = true
+        hitbox.ZIndex = 10
+        hitbox.Transparency = 0.7
+        hitbox.Color3 = Color3.fromRGB(255, 0, 0)
+        hitbox.Visible = true
+        hitbox.Parent = character
+    end
+    
+    -- Оновлюємо розмір
+    if hitbox then
+        hitbox.Size = Vector3.new(hitboxMultiplier, hitboxMultiplier, hitboxMultiplier)
+        -- Оновлюємо колір залежно від розміру
+        local colorValue = math.clamp((hitboxMultiplier - 1) / 9, 0, 1)
+        hitbox.Color3 = Color3.fromRGB(
+            255,
+            math.floor(255 * (1 - colorValue)),
+            0
+        )
+    end
+    
+    -- Зберігаємо зв'язок для відстеження
+    if not hitboxConnections[character] then
+        hitboxConnections[character] = true
+    end
+end
+
+-- Функція застосування розміру до всіх хітбоксів
+local function setAllHitboxSizes()
     for _, v in ipairs(Workspace:GetDescendants()) do
         if v:IsA("Model") and v:FindFirstChild("Humanoid") and v ~= player.Character then
-            for _, part in ipairs(v:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.Size = Vector3.new(value, value, value)
-                end
-            end
+            applyHitboxToCharacter(v)
         end
     end
 end
 
-local function setAllHitboxes()
-    setHitboxSize(hitboxMultiplier)
-end
-
--- Відстеження нових об'єктів
+-- Відстеження нових персонажів
 Workspace.DescendantAdded:Connect(function(descendant)
-    if descendant:IsA("Model") and descendant:FindFirstChild("Humanoid") then
-        for _, part in ipairs(descendant:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.Size = Vector3.new(hitboxMultiplier, hitboxMultiplier, hitboxMultiplier)
-            end
+    if descendant:IsA("Model") then
+        -- Чекаємо появи Humanoid
+        local humanoid = descendant:FindFirstChild("Humanoid")
+        if not humanoid then
+            local connection
+            connection = descendant.ChildAdded:Connect(function(child)
+                if child:IsA("Humanoid") then
+                    connection:Disconnect()
+                    if descendant ~= player.Character then
+                        task.wait(0.1) -- Невелика затримка для завантаження
+                        applyHitboxToCharacter(descendant)
+                    end
+                end
+            end)
+        elseif descendant ~= player.Character then
+            task.wait(0.1)
+            applyHitboxToCharacter(descendant)
         end
     end
+end)
+
+-- Оновлення хітбоксів для існуючих персонажів при зміні персонажа гравця
+player.CharacterAdded:Connect(function(newChar)
+    task.wait(0.5)
+    setAllHitboxSizes()
 end)
 
 -- === СИСТЕМА ESP (Wallhack + Hitbox View) ===
@@ -133,9 +183,7 @@ local function createESP(targetPlayer)
     -- Name ESP
     local nameTag = Instance.new("BillboardGui")
     nameTag.Name = "ESPName"
-    nameTag.Size = UDim2.
-
-new(0, 100, 0, 30)
+    nameTag.Size = UDim2.new(0, 100, 0, 30)
     nameTag.StudsOffset = Vector3.new(0, 3.5, 0)
     nameTag.AlwaysOnTop = true
     nameTag.Adornee = targetPlayer.Character and targetPlayer.Character:FindFirstChild("Head")
@@ -150,18 +198,6 @@ new(0, 100, 0, 30)
     nameLabel.TextScaled = true
     nameLabel.Font = Enum.Font.GothamBold
     nameLabel.Parent = nameTag
-    
-    -- Hitbox Visual
-    local hitbox = Instance.new("BoxHandleAdornment")
-    hitbox.Name = "HitboxVisual"
-    hitbox.Size = Vector3.new(2, 3, 1)
-    hitbox.Color3 = Color3.fromRGB(0, 255, 255)
-    hitbox.Transparency = 0.7
-    hitbox.AlwaysOnTop = seeHitboxesThroughWalls
-    hitbox.ZIndex = 4
-    hitbox.Adornee = targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-    hitbox.Visible = false
-    hitbox.Parent = espFolder
     
     espObjects[targetPlayer] = espFolder
     espFolder.Parent = gui
@@ -187,10 +223,13 @@ end
 -- Оновлення видимості хітбоксів
 local function updateHitboxVisibility()
     for targetPlayer, folder in pairs(espObjects) do
-        local hitbox = folder:FindFirstChild("HitboxVisual")
-        if hitbox then
-            hitbox.Visible = showHitboxes
-            hitbox.AlwaysOnTop = seeHitboxesThroughWalls
+        -- Оновлюємо видимість основних хітбоксів
+        if targetPlayer.Character then
+            local hitbox = targetPlayer.Character:FindFirstChild("GhostHitbox")
+            if hitbox then
+                hitbox.Visible = showHitboxes
+                hitbox.AlwaysOnTop = seeHitboxesThroughWalls
+            end
         end
     end
 end
@@ -201,16 +240,12 @@ local function updateESPPositions()
         if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local box = folder:FindFirstChild("ESPBox")
             local nameTag = folder:FindFirstChild("ESPName")
-            local hitbox = folder:FindFirstChild("HitboxVisual")
             
             if box then
                 box.Adornee = targetPlayer.Character.HumanoidRootPart
             end
             if nameTag then
                 nameTag.Adornee = targetPlayer.Character:FindFirstChild("Head")
-            end
-            if hitbox then
-                hitbox.Adornee = targetPlayer.Character.HumanoidRootPart
             end
         end
     end
@@ -220,7 +255,15 @@ end
 local function removeESP(targetPlayer)
     if espObjects[targetPlayer] then
         espObjects[targetPlayer]:Destroy()
-        espObjects[targetPlayer] = nil
+
+espObjects[targetPlayer] = nil
+    end
+    if hitboxConnections[targetPlayer.Character] then
+        local hitbox = targetPlayer.Character:FindFirstChild("GhostHitbox")
+        if hitbox then
+            hitbox:Destroy()
+        end
+        hitboxConnections[targetPlayer.Character] = nil
     end
 end
 
@@ -228,6 +271,9 @@ end
 local function onPlayerAdded(newPlayer)
     if newPlayer ~= player then
         createESP(newPlayer)
+        if newPlayer.Character then
+            applyHitboxToCharacter(newPlayer.Character)
+        end
     end
 end
 
@@ -239,6 +285,9 @@ end
 for _, existingPlayer in ipairs(Players:GetPlayers()) do
     if existingPlayer ~= player then
         createESP(existingPlayer)
+        if existingPlayer.Character then
+            applyHitboxToCharacter(existingPlayer.Character)
+        end
     end
 end
 
@@ -270,7 +319,6 @@ title.TextScaled = true
 title.Font = Enum.Font.GothamBold
 title.Active = true
 title.Selectable = true
-
 title.Parent = topBar
 
 title.MouseButton1Click:Connect(function()
@@ -322,11 +370,17 @@ closeBtn.Selectable = true
 closeBtn.Parent = topBar
 
 closeBtn.MouseButton1Click:Connect(function()
-    -- Очищаємо ESP перед закриттям
+    -- Очищаємо все перед закриттям
     for targetPlayer, folder in pairs(espObjects) do
         folder:Destroy()
     end
+    for character, _ in pairs(hitboxConnections) do
+        if character and character:FindFirstChild("GhostHitbox") then
+            character.GhostHitbox:Destroy()
+        end
+    end
     espObjects = {}
+    hitboxConnections = {}
     gui:Destroy()
 end)
 
@@ -345,8 +399,8 @@ local function createToggle(name, text, yPos, defaultState, callback)
     toggleFrame.Position = UDim2.new(0.1, 0, 0, yPos)
     toggleFrame.BackgroundTransparency = 1
     toggleFrame.Parent = contentFrame
-    
-    local label = Instance.new("TextLabel")
+
+local label = Instance.new("TextLabel")
     label.Size = UDim2.new(0.7, 0, 1, 0)
     label.Position = UDim2.new(0, 0, 0, 0)
     label.BackgroundTransparency = 1
@@ -400,9 +454,8 @@ createToggle("SeeHitboxesThroughWalls", "See Hitboxes Through Walls", 100, false
     updateHitboxVisibility()
 end)
 
--- === НОВИЙ РОБОЧИЙ СЛАЙДЕР ХІТБОКСІВ ===
+-- === СЛАЙДЕР РОЗМІРУ ХІТБОКСІВ (1x - 10x) ===
 local hitboxFrame = Instance.new("Frame")
-
 hitboxFrame.Size = UDim2.new(0.8, 0, 0, 70)
 hitboxFrame.Position = UDim2.new(0.1, 0, 0, 155)
 hitboxFrame.BackgroundTransparency = 1
@@ -413,14 +466,14 @@ local hitboxLabel = Instance.new("TextLabel")
 hitboxLabel.Size = UDim2.new(1, 0, 0.25, 0)
 hitboxLabel.Position = UDim2.new(0, 0, 0, 0)
 hitboxLabel.BackgroundTransparency = 1
-hitboxLabel.Text = "Hitbox Size: 1.0x"
+hitboxLabel.Text = "Hitbox Size: 1x"
 hitboxLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
 hitboxLabel.TextXAlignment = Enum.TextXAlignment.Left
 hitboxLabel.TextScaled = true
 hitboxLabel.Font = Enum.Font.Gotham
 hitboxLabel.Parent = hitboxFrame
 
--- Фон слайдера (лінія)
+-- Фон слайдера
 local sliderBackground = Instance.new("Frame")
 sliderBackground.Size = UDim2.new(1, 0, 0.25, 0)
 sliderBackground.Position = UDim2.new(0, 0, 0.55, 0)
@@ -438,10 +491,10 @@ sliderFill.BackgroundColor3 = Color3.fromRGB(255, 50, 150)
 sliderFill.BorderSizePixel = 0
 sliderFill.Parent = sliderBackground
 
--- Кругла ручка слайдера
+-- Кругла ручка
 local sliderKnob = Instance.new("TextButton")
-sliderKnob.Size = UDim2.new(0, 20, 0, 20)
-sliderKnob.Position = UDim2.new(0, -10, 0.5, -10)
+sliderKnob.Size = UDim2.new(0, 22, 0, 22)
+sliderKnob.Position = UDim2.new(0, -11, 0.5, -11)
 sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 sliderKnob.BorderSizePixel = 2
 sliderKnob.BorderColor3 = Color3.fromRGB(255, 0, 100)
@@ -451,29 +504,30 @@ sliderKnob.Active = true
 sliderKnob.Selectable = true
 sliderKnob.Parent = sliderBackground
 
--- Робимо ручку круглою
 local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(1, 0)
 corner.Parent = sliderKnob
 
 -- Функція оновлення слайдера
 local function updateSlider(value)
-    local percent = (value - 1) / 1.5 -- 1 -> 0, 2.5 -> 1
+    local percent = (value - 1) / 9 -- 1 -> 0, 10 -> 1
     percent = math.clamp(percent, 0, 1)
     
     sliderFill.Size = UDim2.new(percent, 0, 1, 0)
-    sliderKnob.Position = UDim2.new(percent, -10, 0.5, -10)
-    hitboxLabel.Text = "Hitbox Size: " .. string.format("%.1f", value) .. "x"
+    sliderKnob.Position = UDim2.new(percent, -11, 0.5, -11)
+    hitboxLabel.Text = "Hitbox Size: " ..
+
+math.floor(value) .. "x"
     hitboxMultiplier = value
     
-    -- Застосовуємо розмір до хітбоксів
-    setAllHitboxes()
+    -- Застосовуємо новий розмір до всіх хітбоксів
+    setAllHitboxSizes()
 end
 
--- Глобальний стан перетягування
+-- Стан перетягування
 local sliderDragging = false
 
--- Функція розрахунку позиції з координат вводу
+-- Функція отримання процента з позиції вводу
 local function getSliderPercent(inputX)
     local bgPos = sliderBackground.AbsolutePosition.X
     local bgSize = sliderBackground.AbsoluteSize.X
@@ -481,15 +535,13 @@ local function getSliderPercent(inputX)
     return math.clamp(percent, 0, 1)
 end
 
--- Функція застосування процента до значення слайдера
+-- Функція застосування процента
 local function applySliderPercent(percent)
-    local value = 1 + (percent * 1.5)
+    local value = 1 + (percent * 9)
     updateSlider(value)
 end
 
--- === ОБРОБНИКИ ПОДІЙ ДЛЯ СЛАЙДЕРА ===
-
--- Клік на фон слайдера
+-- Обробники подій для слайдера
 sliderBackground.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or 
        input.UserInputType == Enum.UserInputType.Touch then
@@ -499,7 +551,6 @@ sliderBackground.InputBegan:Connect(function(input)
     end
 end)
 
--- Клік на ручку слайдера
 sliderKnob.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or 
        input.UserInputType == Enum.UserInputType.Touch then
@@ -507,7 +558,6 @@ sliderKnob.InputBegan:Connect(function(input)
     end
 end)
 
--- Глобальне відстеження руху (працює навіть якщо палець за межами слайдера)
 UserInputService.InputChanged:Connect(function(input)
     if sliderDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or 
                            input.UserInputType == Enum.UserInputType.Touch) then
@@ -516,16 +566,13 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Завершення перетягування
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or 
        input.UserInputType == Enum.UserInputType.Touch then
         sliderDragging = false
-
-end
+    end
 end)
 
--- Додатковий захист від зависання
 sliderBackground.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or 
        input.UserInputType == Enum.UserInputType.Touch then
@@ -553,8 +600,8 @@ youtube.Font = Enum.Font.Gotham
 youtube.Parent = contentFrame
 
 -- Початкове значення
-updateSlider(1.0)
+updateSlider(1)
 
 print("Ghost Client V2.0 Loaded Successfully!")
-print("Features: ESP Wallhack, Hitbox View, Hitbox Size Slider")
-print("Slider works on both PC and Mobile!")
+print("Hitbox Size Range: 1x - 10x")
+print("Modifies BoxHandleAdornment size, not character parts")
