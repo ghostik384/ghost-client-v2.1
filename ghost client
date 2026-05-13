@@ -1,0 +1,37 @@
+-- Ghost Client V2.0 - Minimal GUI (No Functions)
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "GhostClientV2"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 300, 0, 200)
+frame.Position = UDim2.new(0.5, -150, 0.5, -100)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+frame.BackgroundTransparency = 0.1
+frame.BorderSizePixel = 2
+frame.BorderColor3 = Color3.fromRGB(255, 0, 120)
+frame.ClipsDescendants = true
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 1, 0)
+title.BackgroundTransparency = 1
+title.Text = "GHOST CLIENT V2.0"
+title.TextColor3 = Color3.fromRGB(255, 50, 130)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.Parent = frame
+
+local line = Instance.new("Frame")
+line.Size = UDim2.new(1, 0, 0, 2)
+line.Position = UDim2.new(0, 0, 0, 40)
+line.BackgroundColor3 = Color3.fromRGB(255, 0, 120)
+line.BorderSizePixel = 0
+line.Parent = frame
