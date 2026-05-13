@@ -1,18 +1,23 @@
--- Ghost Client V2.0 - Minimal GUI (No Functions)
+-- Ghost Client V2.0 - Full GUI with Hitbox & Wallhack
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+local camera = workspace.CurrentCamera
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "GhostClientV2"
 gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
+-- Основне вікно
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 200)
-frame.Position = UDim2.new(0.5, -150, 0.5, -100)
+frame.Size = UDim2.new(0, 350, 0, 450)
+frame.Position = UDim2.new(0.5, -175, 0.5, -225)
 frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-frame.BackgroundTransparency = 0.1
+frame.BackgroundTransparency = 0.05
 frame.BorderSizePixel = 2
 frame.BorderColor3 = Color3.fromRGB(255, 0, 120)
 frame.ClipsDescendants = true
@@ -20,14 +25,18 @@ frame.Active = true
 frame.Draggable = true
 frame.Parent = gui
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 1, 0)
-title.BackgroundTransparency = 1
-title.Text = "GHOST CLIENT V2.0"
-title.TextColor3 = Color3.fromRGB(255, 50, 130)
-title.TextScaled = true
-title.Font = Enum.Font.GothamBold
-title.Parent = frame
+-- Заголовок (клікабельний для згортання)
+local titleBar = Instance.new("TextButton")
+titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+titleBar.BorderSizePixel = 0
+titleBar.Text = "GHOST CLIENT V2.0"
+titleBar.TextColor3 = Color3.fromRGB(255, 50, 120)
+titleBar.TextScaled = true
+titleBar.Font = Enum.Font.GothamBold
+titleBar.AutoButtonColor = false
+titleBar.Parent = frame
 
 local line = Instance.new("Frame")
 line.Size = UDim2.new(1, 0, 0, 2)
@@ -35,3 +44,315 @@ line.Position = UDim2.new(0, 0, 0, 40)
 line.BackgroundColor3 = Color3.fromRGB(255, 0, 120)
 line.BorderSizePixel = 0
 line.Parent = frame
+
+-- Контейнер для всього вмісту (для анімації згортання)
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(1, 0, 1, -40)
+contentContainer.Position = UDim2.new(0, 0, 0, 42)
+contentContainer.BackgroundTransparency = 1
+contentContainer.Parent = frame
+
+-- Функція створення секції
+local function createSection(title, yPos)
+    local section = Instance.new("Frame")
+    section.Size = UDim2.new(0.9, 0, 0, 40)
+    section.Position = UDim2.new(0.05, 0, 0, yPos)
+    section.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    section.BorderSizePixel = 1
+    section.BorderColor3 = Color3.fromRGB(255, 0, 120)
+    section.Parent = contentContainer
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = title
+    label.TextColor3 = Color3.fromRGB(255, 200, 100)
+    label.TextXAlignment = Enum.TextXAlignment.Center
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Parent = section
+    
+    return section
+end
+
+-- Функція створення Toggle
+local function createToggle(parent, text, yPos, defaultState, callback)
+    local toggleFrame = Instance.new("Frame")
+    toggleFrame.Size = UDim2.new(0.9, 0, 0, 35)
+    toggleFrame.Position = UDim2.new(0.05, 0, 0, yPos)
+    toggleFrame.BackgroundTransparency = 1
+    toggleFrame.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(220, 220, 220)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Font = Enum.Font.Gotham
+    label.Parent = toggleFrame
+    
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0.2, 0, 0.7, 0)
+    toggleBtn.Position = UDim2.new(0.75, 0, 0.15, 0)
+    toggleBtn.BackgroundColor3 = defaultState and Color3.fromRGB(255, 0, 100) or Color3.fromRGB(80, 80, 90)
+    toggleBtn.BorderSizePixel = 1
+    toggleBtn.BorderColor3 = Color3.fromRGB(200, 200, 200)
+    toggleBtn.Text = defaultState and "ON" or "OFF"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.TextScaled = true
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.Parent = toggleFrame
+    
+    local state = defaultState
+    toggleBtn.MouseButton1Click:Connect(function()
+        state = not state
+        toggleBtn.BackgroundColor3 = state and Color3.fromRGB(255, 0, 100) or Color3.fromRGB(80, 80, 90)
+        toggleBtn.Text = state and "ON" or "OFF"
+        callback(state)
+    end)
+    
+    return toggleFrame
+end
+
+-- ========== НАЛАШТУВАННЯ (Settings) ==========
+local settingsSection = createSection("⚙️ SETTINGS", 5)
+
+local settingsContainer = Instance.new("Frame")
+settingsContainer.Size = UDim2.new(1, 0, 0, 120)
+settingsContainer.Position = UDim2.new(0, 0, 0, 45)
+settingsContainer.BackgroundTransparency = 1
+settingsContainer.Parent = settingsSection
+
+-- Hitbox View Toggle
+createToggle(settingsContainer, "🔲 Hitbox View", 5, false, function(state)
+    _G.HitboxView = state
+    print("Hitbox View: " .. tostring(state))
+end)
+
+-- See Hitboxes Through Walls Toggle
+createToggle(settingsContainer, "👁️ See Hitboxes Through Walls", 45, false, function(state)
+    _G.SeeThroughWalls = state
+    print("See Through Walls: " .. tostring(state))
+end)
+
+-- Wallhack Toggle
+createToggle(settingsContainer, "🧱 Wallhack (See Players Through Walls)", 85, false, function(state)
+    _G.Wallhack = state
+    updateWallhack()
+    print("Wallhack: " .. tostring(state))
+end)
+
+-- ========== ХІТБОКСИ (Hitboxes) ==========
+local hitboxSection = createSection("🎯 HITBOX SIZE", 165)
+
+-- Індикатор значення
+local sizeValueLabel = Instance.new("TextLabel")
+sizeValueLabel.Size = UDim2.new(0.3, 0, 0, 30)
+sizeValueLabel.Position = UDim2.new(0.35, 0, 0, 45)
+sizeValueLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+sizeValueLabel.BorderSizePixel = 1
+sizeValueLabel.BorderColor3 = Color3.fromRGB(255, 0, 100)
+sizeValueLabel.Text = "1.0x"
+sizeValueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+sizeValueLabel.TextScaled = true
+sizeValueLabel.Font = Enum.Font.GothamBold
+sizeValueLabel.Parent = hitboxSection
+
+local sliderFrame = Instance.new("Frame")
+sliderFrame.Size = UDim2.new(0.8, 0, 0, 25)
+sliderFrame.Position = UDim2.new(0.1, 0, 0, 85)
+sliderFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+sliderFrame.BorderSizePixel = 1
+sliderFrame.BorderColor3 = Color3.fromRGB(255, 0, 100)
+sliderFrame.Parent = hitboxSection
+
+local sliderFill = Instance.new("Frame")
+sliderFill.Size = UDim2.new(0.5, 0, 1, 0) -- 1.75x / 3.5 max = 0.5
+sliderFill.BackgroundColor3 = Color3.fromRGB(255, 0, 100)
+sliderFill.BorderSizePixel = 0
+sliderFill.Parent = sliderFrame
+
+local knob = Instance.new("Frame")
+knob.Size = UDim2.new(0, 12, 0, 30)
+knob.Position = UDim2.new(0.5, -6, -0.1, 0)
+knob.BackgroundColor3 = Color3.fromRGB(255, 100, 150)
+knob.BorderSizePixel = 1
+knob.BorderColor3 = Color3.fromRGB(255, 255, 255)
+knob.Parent = sliderFrame
+
+local hitboxScale = 1.0 -- 0.5 до 3.0
+local dragging = false
+
+local function updateHitboxDisplay(value)
+    local t = (value - 0.5) / 2.5 -- макс 3.0, мін 0.5
+    sliderFill.Size = UDim2.new(math.clamp(t, 0, 1), 0, 1, 0)
+    knob.Position = UDim2.new(math.clamp(t, 0, 1), -6, -0.1, 0)
+    local displayValue = string.format("%.1f", value)
+    sizeValueLabel.Text = displayValue .. "x"
+    hitboxScale = value
+    _G.HitboxScale = value
+    print("Hitbox scale set to: " .. value .. "x")
+end
+
+sliderFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if dragging then
+        local mousePos = mouse.X
+        local sliderPos = sliderFrame.AbsolutePosition.X
+        local width = sliderFrame.AbsoluteSize.X
+        local t = math.clamp((mousePos - sliderPos) / width, 0, 1)
+        local value = 0.5 + (t * 2.5) -- діапазон 0.5x до 3.0x
+        updateHitboxDisplay(value)
+    end
+end)
+
+-- Кнопки швидкого вибору
+local function createQuickBtn(text, xPos, scaleVal)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.18, 0, 0, 30)
+    btn.Position = UDim2.new(xPos, 0, 0, 125)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    btn.BorderSizePixel = 1
+    btn.BorderColor3 = Color3.fromRGB(255, 0, 100)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextScaled = true
+    btn.Font = Enum.Font.Gotham
+    btn.Parent = hitboxSection
+    
+    btn.MouseButton1Click:Connect(function()
+        updateHitboxDisplay(scaleVal)
+    end)
+end
+
+createQuickBtn("0.5x", 0.05, 0.5)
+createQuickBtn("1.0x", 0.26, 1.0)
+createQuickBtn("1.5x", 0.47, 1.5)
+createQuickBtn("2.0x", 0.68, 2.0)
+createQuickBtn("2.5x", 0.77, 2.5) -- місця трохи менше через довжину
+
+-- ========== HITBOX ВІЗУАЛІЗАЦІЯ ==========
+local hitboxParts = {}
+local highlight = Instance.new("Highlight")
+highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+highlight.FillColor = Color3.fromRGB(255, 0, 0)
+highlight.FillTransparency = 0.7
+highlight.OutlineTransparency = 0.3
+highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+
+local function updateHitboxView()
+    if not _G.HitboxView then
+        for _, part in pairs(hitboxParts) do
+            if part and part.Parent then
+                part:Destroy()
+            end
+        end
+        hitboxParts = {}
+        if highlight.Parent then highlight.Parent = nil end
+        return
+    end
+    
+    for _, otherPlayer in pairs(Players:GetPlayers()) do
+        if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character.Parent then
+            local char = otherPlayer.Character
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                -- Створюємо візуальний хітбокс
+                local box = Instance.new("BoxHandleAdornment")
+                box.Size = Vector3.new(3.5 * hitboxScale, 5 * hitboxScale, 1.8 * hitboxScale)
+                box.Adornee = root
+                box.Color3 = Color3.fromRGB(255, 0, 0)
+                box.Transparency = 0.5
+                box.ZIndex = 0
+                box.AlwaysOnTop = _G.SeeThroughWalls or false
+                box.Parent = root
+                table.insert(hitboxParts, box)
+            end
+        end
+    end
+end
+
+-- Оновлення через кожен кадр
+RunService.RenderStepped:Connect(function()
+    updateHitboxView()
+end)
+
+-- Оновлення Wallhack
+local function updateWallhack()
+    if _G.Wallhack then
+        for _, otherPlayer in pairs(Players:GetPlayers()) do
+            if otherPlayer ~= player and otherPlayer.Character then
+                local highlightClone = highlight:Clone()
+                highlightClone.Parent = otherPlayer.Character
+            end
+        end
+    else
+        for _, otherPlayer in pairs(Players:GetPlayers()) do
+            if otherPlayer ~= player and otherPlayer.Character then
+                for _, h in pairs(otherPlayer.Character:GetChildren()) do
+                    if h:IsA("Highlight") then h:Destroy() end
+                end
+            end
+        end
+    end
+end
+
+-- При появі нового гравця
+Players.PlayerAdded:Connect(function(newPlayer)
+    if _G.Wallhack then
+        newPlayer.CharacterAdded:Connect(function(char)
+            wait(0.5)
+            if _G.Wallhack then
+                local newHighlight = highlight:Clone()
+                newHighlight.Parent = char
+            end
+        end)
+    end
+end)
+
+-- ========== АНІМАЦІЯ ЗГОРТАННЯ ==========
+local isCollapsed = false
+local collapseTween = nil
+local originalHeight = 450
+local collapsedHeight = 40
+
+titleBar.MouseButton1Click:Connect(function()
+    isCollapsed = not isCollapsed
+    local targetHeight = isCollapsed and collapsedHeight or originalHeight
+    local targetContentVisible = not isCollapsed
+    
+    -- Анімація висоти
+    local tweenService = game:GetService("TweenService")
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+    local tween = tweenService:Create(frame, tweenInfo, {Size = UDim2.new(0, 350, 0, targetHeight)})
+    tween:Play()
+    
+    -- Анімація прозорості контенту
+    for _, child in pairs(contentContainer:GetChildren()) do
+        if child:IsA("Frame") then
+            local fadeTween = tweenService:Create(child, tweenInfo, {BackgroundTransparency = isCollapsed and 1 or 0.3})
+            fadeTween:Play()
+        end
+    end
+    
+    contentContainer.Visible = not isCollapsed
+end)
+
+-- Початкове значення
+updateHitboxDisplay(1.0)
+
+print("Ghost Client V2.0 Loaded! Click title bar to collapse/expand.")
