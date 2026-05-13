@@ -37,6 +37,7 @@ contentFrame.Parent = frame
 -- Стан вікна
 local isOpen = true
 local isAnimating = false
+local isLocked = false
 
 -- Змінні для функцій
 local hitboxMultiplier = 1
@@ -87,9 +88,17 @@ local function expandGUI()
     isAnimating = false
 end
 
+-- Верхня панель
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, 0, 0, 40)
+topBar.Position = UDim2.new(0, 0, 0, 0)
+topBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+topBar.BorderSizePixel = 0
+topBar.Parent = frame
+
 -- Заголовок
 local title = Instance.new("TextButton")
-title.Size = UDim2.new(1, 0, 0, 40)
+title.Size = UDim2.new(1, -80, 1, 0)
 title.Position = UDim2.new(0, 0, 0, 0)
 title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 title.BorderSizePixel = 0
@@ -97,7 +106,7 @@ title.Text = "GHOST CLIENT V2.0"
 title.TextColor3 = Color3.fromRGB(255, 50, 120)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBold
-title.Parent = frame
+title.Parent = topBar
 
 title.MouseButton1Click:Connect(function()
     if isOpen then
@@ -105,6 +114,46 @@ title.MouseButton1Click:Connect(function()
     else
         expandGUI()
     end
+end)
+
+-- Кнопка Lock
+local lockBtn = Instance.new("TextButton")
+lockBtn.Size = UDim2.new(0, 35, 0, 35)
+lockBtn.Position = UDim2.new(1, -75, 0, 2.5)
+lockBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+lockBtn.BorderSizePixel = 0
+lockBtn.Text = "🔓"
+lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+lockBtn.TextScaled = true
+lockBtn.Font = Enum.Font.GothamBold
+lockBtn.Parent = topBar
+
+lockBtn.MouseButton1Click:Connect(function()
+    isLocked = not isLocked
+    frame.Draggable = not isLocked
+    if isLocked then
+        lockBtn.Text = "🔒"
+        lockBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 100)
+    else
+        lockBtn.Text = "🔓"
+        lockBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+    end
+end)
+
+-- Кнопка закриття (X)
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 35, 0, 35)
+closeBtn.Position = UDim2.new(1, -35, 0, 2.5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.TextScaled = true
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = topBar
+
+closeBtn.MouseButton1Click:Connect(function()
+    gui:Destroy()
 end)
 
 -- Лінія під заголовком
@@ -201,7 +250,7 @@ marksContainer.BackgroundTransparency = 1
 marksContainer.Parent = hitboxFrame
 
 local marks = {"1x", "1.5x", "2x", "2.5x"}
-local markPositions = {0, 0.33, 0.66, 0.95}
+local markPositions = {0, 0.33, 0.66, 0.93}
 
 for i, mark in ipairs(marks) do
     local markLabel = Instance.new("TextLabel")
@@ -215,12 +264,14 @@ for i, mark in ipairs(marks) do
     markLabel.Parent = marksContainer
 end
 
-local hitboxSlider = Instance.new("Frame")
+local hitboxSlider = Instance.new("TextButton")
 hitboxSlider.Size = UDim2.new(1, 0, 0.25, 0)
 hitboxSlider.Position = UDim2.new(0, 0, 0.55, 0)
 hitboxSlider.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
 hitboxSlider.BorderSizePixel = 1
 hitboxSlider.BorderColor3 = Color3.fromRGB(255, 0, 100)
+hitboxSlider.Text = ""
+hitboxSlider.AutoButtonColor = false
 hitboxSlider.Parent = hitboxFrame
 
 local sliderFill = Instance.new("Frame")
@@ -235,14 +286,22 @@ local function updateHitbox(value)
     sliderFill.Size = UDim2.new(norm, 0, 1, 0)
     hitboxLabel.Text = "Hitbox Size: " .. string.format("%.1f", value) .. "x"
     hitboxMultiplier = value
-    print("Hitbox size: " .. string.format("%.1f", value) .. "x")
+    print("Hitbox size set to: " .. string.format("%.1f", value) .. "x")
 end
 
+-- Логіка перетягування слайдера
 local hitboxDrag = false
 
 hitboxSlider.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         hitboxDrag = true
+        -- Оновлюємо позицію одразу при кліку
+        local mousePos = mouse.X
+        local sliderPos = hitboxSlider.AbsolutePosition.X
+        local width = hitboxSlider.AbsoluteSize.X
+        local t = math.clamp((mousePos - sliderPos) / width, 0, 1)
+        local multiplier = 1 + (t * 1.5)
+        updateHitbox(multiplier)
     end
 end)
 
@@ -258,8 +317,8 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
-RunService.RenderStepped:Connect(function()
-    if hitboxDrag then
+UserInputService.InputChanged:Connect(function(input)
+    if hitboxDrag and input.UserInputType == Enum.UserInputType.MouseMovement then
         local mousePos = mouse.X
         local sliderPos = hitboxSlider.AbsolutePosition.X
         local width = hitboxSlider.AbsoluteSize.X
@@ -285,3 +344,4 @@ updateHitbox(1.0)
 
 print("Ghost Client V2.0 Loaded!")
 print("Click title to collapse/expand")
+print("Lock button stops GUI from moving")
