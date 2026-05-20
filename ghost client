@@ -1,317 +1,270 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>GHOST CLIENT</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>GHOST CLIENT — Loading</title>
 <style>
- * { box-sizing: border-box; margin: 0; padding: 0; }
- html, body {
-   height: 100%;
-   font-family: 'Montserrat', 'Roboto', sans-serif;
-   background:
-     radial-gradient(ellipse at top, #1a1a2e 0%, #0f0f1a 60%, #06060c 100%);
-   color: #e8e8f5;
-   overflow: hidden;
-   user-select: none;
-   -webkit-user-select: none;
- }
+  :root{
+    --bg1:#0a0a12;
+    --bg2:#12121e;
+    --panel:#0f0f1a;
+    --muted:#22222e;
+    --accent:#00ccff;
+    --white:#ffffff;
+    --radius:12px;
+    --shadow: 0 8px 24px rgba(0,0,0,0.6);
+  }
 
- /* Floating ghost icon (when GUI closed) */
- .ghost-toggle {
-   position: fixed;
-   top: 15px;
-   left: 15px;
-   width: 55px;
-   height: 55px;
-   border-radius: 50%;
-   background: rgba(30, 30, 47, 0.9);
-   border: 1px solid #3a3a5a;
-   display: flex;
-   align-items: center;
-   justify-content: center;
-   cursor: pointer;
-   z-index: 9999;
-   backdrop-filter: blur(8px);
-   font-size: 28px;
-   line-height: 1;
-   opacity: 1;
-   transform: scale(1);
-   transition: background 0.2s ease, box-shadow 0.2s ease,
-               transform 0.28s cubic-bezier(.2,.9,.3,1.2),
-               opacity 0.28s ease;
- }
- .ghost-toggle:hover {
-   background: rgba(58, 58, 90, 0.95);
-   box-shadow: 0 0 18px rgba(140, 100, 255, 0.55);
-   transform: scale(1.08);
- }
- .ghost-toggle:active { transform: scale(0.94); }
- .ghost-toggle.hidden {
-   opacity: 0;
-   transform: scale(0.5) rotate(-12deg);
-   pointer-events: none;
- }
+  html,body{height:100%;margin:0;font-family: "Montserrat", "Gotham", system-ui, -apple-system, "Segoe UI", Roboto, Arial; background: linear-gradient(180deg,var(--bg1),var(--bg2)); color:var(--white); overflow:hidden; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
 
- /* GUI window */
- .gui {
-   position: fixed;
-   top: 50%;
-   left: 50%;
-   translate: -50% -50%;
-   scale: 1;
-   width: 650px;
-   height: 450px;
-   max-width: calc(100vw - 24px);
-   max-height: calc(100vh - 24px);
-   background: #0d0d15;
-   border: 1px solid #3a3a5a;
-   border-radius: 12px;
-   box-shadow:
-     0 20px 60px rgba(0, 0, 0, 0.6),
-     0 0 30px rgba(90, 60, 180, 0.15);
-   display: flex;
-   flex-direction: column;
-   overflow: hidden;
-   opacity: 1;
-   transform-origin: center;
-   transition: opacity 0.3s ease,
-               scale 0.32s cubic-bezier(.2,.9,.3,1.2),
-               filter 0.3s ease;
- }
- .gui.dragged { translate: 0 0; }
- .gui.hidden {
-   opacity: 0;
-   scale: 0.9;
-   filter: blur(4px);
-   pointer-events: none;
- }
+  /* Loader container */
+  .loader-wrap{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:100;
+    transition:opacity .5s ease, visibility .5s ease;
+  }
 
- /* Top bar */
- .gui-top {
-   height: 44px;
-   background: linear-gradient(180deg, #1a1a2e 0%, #15152a 100%);
-   border-bottom: 1px solid #2d2d44;
-   display: flex;
-   align-items: center;
-   padding: 0 12px;
-   cursor: grab;
-   flex-shrink: 0;
- }
- .gui-top:active { cursor: grabbing; }
+  /* Vignette / veil */
+  .veil{position:absolute; inset:0; pointer-events:none; background: radial-gradient(60% 60% at 50% 40%, rgba(255,255,255,0.02), transparent 20%), linear-gradient(180deg, rgba(0,0,0,0.12), transparent 40%); mix-blend-mode: overlay; filter: blur(6px);}
 
- .brand { display: flex; align-items: center; gap: 10px; flex: 1; }
- .brand-logo {
-   width: 28px; height: 28px;
-   border-radius: 50%;
-   background: linear-gradient(135deg, #4a3aa0, #2d2d44);
-   display: flex; align-items: center; justify-content: center;
-   font-size: 16px;
-   box-shadow: 0 0 10px rgba(120, 90, 230, 0.4);
- }
- .brand-name {
-   font-weight: 700; font-size: 14px;
-   letter-spacing: 1.5px; color: #d8d2ff;
- }
+  /* Card */
+  .hud-card{
+    width:820px; max-width:92%; padding:48px 56px; border-radius:16px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; gap:28px; position:relative; backdrop-filter: blur(6px); border:1px solid rgba(255,255,255,0.03);
+  }
+  .hud-card::after{content:""; position:absolute; inset:0; border-radius:16px; pointer-events:none; box-shadow: 0 0 40px 6px rgba(0,204,255,0.03) inset;}
 
- .close-btn {
-   width: 28px; height: 28px;
-   border-radius: 6px;
-   background: #2a1320;
-   color: #ff6b8b;
-   border: 1px solid #5a2a3a;
-   display: flex; align-items: center; justify-content: center;
-   cursor: pointer;
-   font-size: 16px; font-weight: 700; line-height: 1;
-   transition: background 0.15s ease, color 0.15s ease;
- }
- .close-btn:hover { background: #ff3b5c; color: #fff; }
+  /* Logo */
+  .logo{display:flex; flex-direction:column; align-items:center; gap:8px; position:relative;}
+  .title-large{font-weight:800; letter-spacing:6px; font-size:56px; color:var(--white); text-shadow: 0 6px 18px rgba(0,0,0,0.6), 0 0 18px rgba(0,204,255,0.06); display:flex; align-items:center; gap:12px;}
+  .title-small{font-weight:700; font-size:18px; color:rgba(255,255,255,0.9); text-shadow: 0 6px 18px rgba(0,0,0,0.6); letter-spacing:4px;}
 
- /* Body */
- .gui-body {
-   flex: 1; display: flex;
-   padding: 12px; gap: 12px;
-   min-height: 0;
- }
- .panel {
-   background: #12121f;
-   border: 1px solid #2d2d44;
-   border-radius: 8px;
-   padding: 16px;
-   display: flex;
-   align-items: center; justify-content: center;
-   flex-direction: column;
-   gap: 8px;
-   overflow: hidden;
- }
- .panel-left { width: 180px; flex-shrink: 0; }
- .panel-right { flex: 1; }
+  /* Ghost inline */
+  .ghost-inline{width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; filter: drop-shadow(0 6px 12px rgba(0,0,0,0.6));}
+  .ghost-svg{width:100%; height:100%; display:block; fill:#ffffff; opacity:0.98; filter: drop-shadow(0 6px 18px rgba(0,204,255,0.08));}
 
- .panel-title {
-   font-size: 12px; letter-spacing: 2px;
-   color: #6a6a8a; font-weight: 600;
- }
- .panel-text {
-   font-size: 20px; font-weight: 700;
-   letter-spacing: 3px; color: #b8a8ff;
-   text-shadow: 0 0 12px rgba(140, 100, 255, 0.4);
- }
- .ghost-big {
-   font-size: 42px; opacity: 0.85;
+  /* Particles */
+  .particles{position:absolute; top:18%; left:50%; transform:translateX(-50%); width:60%; height:60%; pointer-events:none; overflow:visible;}
+  .particle{position:absolute; width:6px; height:6px; background: linear-gradient(180deg, rgba(0,204,255,0.95), rgba(255,255,255,0.9)); border-radius:50%; opacity:0; filter: blur(0.6px); box-shadow: 0 0 10px rgba(0,204,255,0.12); animation: floatUp linear infinite;}
+  @keyframes floatUp{0%{ transform: translateY(0) scale(0.8); opacity:0;} 10%{opacity:0.9;} 100%{ transform: translateY(-160px) scale(1.2); opacity:0;}}
 
-filter: drop-shadow(0 0 12px rgba(140, 100, 255, 0.45));
- }
+  /* Progress row */
+  .progress-row{width:100%; display:flex; align-items:center; gap:14px; justify-content:center; margin-top:6px;}
+  .ghost-small{width:20px; height:20px; display:inline-block; transform-origin:center; animation: ghostPulse 0.5s ease-in-out infinite;}
+  @keyframes ghostPulse{0%{ transform: scale(1); opacity:1;} 50%{ transform: scale(1.3); opacity:0.8;} 100%{ transform: scale(1); opacity:1;}}
 
- /* Bottom status */
- .gui-bottom {
-   height: 26px;
-   background: #0a0a12;
-   border-top: 1px solid #2d2d44;
-   display: flex; align-items: center;
-   padding: 0 12px;
-   font-size: 10px; color: #5a5a7a;
-   letter-spacing: 1.5px;
-   flex-shrink: 0;
- }
- .status-dot {
-   width: 7px; height: 7px; border-radius: 50%;
-   background: #6cf09a;
-   box-shadow: 0 0 6px #6cf09a;
-   margin-right: 8px;
-   animation: pulse 1.6s ease-in-out infinite;
- }
- @keyframes pulse {
-   0%, 100% { opacity: 1; }
-   50% { opacity: 0.4; }
- }
+  .progress-bar{width:380px; height:14px; background:var(--muted); border-radius:12px; position:relative; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.03);}
+  .progress-fill{position:absolute; left:0; top:0; bottom:0; width:0%; background: linear-gradient(90deg, rgba(255,255,255,0.95), var(--accent)); box-shadow: 0 0 18px rgba(0,204,255,0.28); border-radius:12px; transition: width 0.07s linear;}
+  .percent{min-width:48px; text-align:left; font-weight:700; color:var(--white); text-shadow: 0 6px 18px rgba(0,0,0,0.6); font-size:14px; letter-spacing:1px;}
 
- /* Mobile */
- @media (max-width: 600px) {
-   .gui { width: calc(100vw - 20px); height: auto; max-height: calc(100vh - 20px); }
-   .gui-body { flex-direction: column; }
-   .panel-left { width: 100%; min-height: 100px; }
-   .panel-right { min-height: 180px; }
-   .brand-name { font-size: 12px; letter-spacing: 1px; }
- }
+  /* Fade out */
+  .fade-out{opacity:0; visibility:hidden;}
+
+  /* Main GUI (appears after loading) */
+  .main-gui{position:fixed; inset:0; display:flex; align-items:flex-start; justify-content:center; padding-top:48px; z-index:80; opacity:0; pointer-events:none; transition:opacity .4s ease;}
+  .main-gui.show{opacity:1; pointer-events:auto;}
+  .main-panel{width:920px; max-width:94%; padding:28px; border-radius:14px; background: linear-gradient(180deg, rgba(15,15,26,0.9), rgba(10,10,18,0.85)); box-shadow: 0 12px 40px rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.03); color:var(--white); display:flex; gap:20px;}
+  .sidebar{width:220px; background: rgba(255,255,255,0.02); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px;}
+  .content{flex:1; padding:12px; display:flex; flex-direction:column; gap:12px;}
+  .btn{height:44px; border-radius:10px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.03); display:flex; align-items:center; justify-content:center; color:var(--white); font-weight:700; cursor:pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.5);}
+  .btn:active{transform:translateY(1px);}
+  .panel-box{background: rgba(255,255,255,0.01); border-radius:10px; padding:12px; min-height:120px; border:1px solid rgba(255,255,255,0.02);}
+
+  /* Ready overlay text */
+  .ready-overlay{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; opacity:0; transition:opacity .4s ease; z-index:90;}
+  .ready-overlay.show{opacity:1;}
+  .ready-text{font-size:28px; font-weight:800; background: linear-gradient(90deg, rgba(255,255,255,0.98), rgba(200,220,255,0.9)); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow: 0 8px 30px rgba(0,0,0,0.6);}
+
+  /* Responsive */
+  @media (max-width:720px){
+    .hud-card{padding:28px 20px;}
+    .title-large{font-size:36px;}
+    .progress-bar{width:300px;}
+    .main-panel{flex-direction:column; align-items:stretch;}
+    .sidebar{width:100%;}
+  }
 </style>
 </head>
 <body>
+  <!-- Loader -->
+  <div class="loader-wrap" id="loaderWrap" aria-hidden="false">
+    <div class="veil"></div>
 
-<div class="ghost-toggle hidden" id="ghostToggle" title="Open GHOST CLIENT">👻</div>
+    <div class="hud-card" role="dialog" aria-label="GHOST CLIENT loading screen">
+      <div class="particles" id="particles"></div>
 
-<div class="gui" id="gui">
- <div class="gui-top" id="guiTop">
-   <div class="brand">
-     <div class="brand-logo">👻</div>
-     <div class="brand-name">GHOST CLIENT</div>
-   </div>
-   <div class="close-btn" id="closeBtn" title="Close">✕</div>
- </div>
+      <div class="logo" aria-hidden="true">
+        <div class="title-large" aria-hidden="true">
+          <span>GHO</span>
+          <span class="ghost-inline" aria-hidden="true">
+            <svg class="ghost-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M32 2C20.954 2 12 10.954 12 22v18c0 4.418 3.582 8 8 8 1.657 0 3.157-.672 4.243-1.757L32 44l7.757 2.243C41.843 47.328 43.343 48 45 48c4.418 0 8-3.582 8-8V22C56 10.954 47.046 2 36 2H32z"/>
+            </svg>
+          </span>
+          <span>T</span>
+          <span style="opacity:0.9; margin-left:8px;">CLIENT</span>
+        </div>
 
- <div class="gui-body">
-   <div class="panel panel-left">
-     <div class="ghost-big">👻</div>
-     <div class="panel-title">CLIENT</div>
-     <div class="panel-text" style="font-size:14px;">GHOST</div>
-   </div>
-   <div class="panel panel-right">
-     <div class="panel-title">STATUS</div>
-     <div class="panel-text">READY</div>
-   </div>
- </div>
+        <div class="title-small" aria-hidden="true">CLIENT</div>
+      </div>
 
- <div class="gui-bottom">
-   <div class="status-dot"></div>
-   <span>SYSTEM ONLINE</span>
- </div>
-</div>
+      <div class="progress-row" aria-hidden="true">
+        <div class="ghost-small" aria-hidden="true">
+          <svg class="ghost-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M32 2C20.954 2 12 10.954 12 22v18c0 4.418 3.582 8 8 8 1.657 0 3.157-.672 4.243-1.757L32 44l7.757 2.243C41.843 47.328 43.343 48 45 48c4.418 0 8-3.582 8-8V22C56 10.954 47.046 2 36 2H32z"/>
+          </svg>
+        </div>
+
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Loading progress">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="percent" id="percentText">0%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ready overlay -->
+  <div class="ready-overlay" id="readyOverlay" aria-hidden="true">
+    <div class="ready-text">Ready</div>
+  </div>
+
+  <!-- Main GUI (appears after loading) -->
+  <div class="main-gui" id="mainGui" aria-hidden="true">
+    <div class="main-panel" role="application" aria-label="GHOST CLIENT main interface">
+      <div class="sidebar" aria-hidden="false">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <div style="width:28px; height:28px;">
+            <svg class="ghost-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M32 2C20.954 2 12 10.954 12 22v18c0 4.418 3.582 8 8 8 1.657 0 3.157-.672 4.243-1.757L32 44l7.757 2.243C41.843 47.328 43.343 48 45 48c4.418 0 8-3.582 8-8V22C56 10.954 47.046 2 36 2H32z"/>
+            </svg>
+          </div>
+          <div style="font-weight:800; letter-spacing:2px;">GHOST CLIENT</div>
+        </div>
+
+        <button class="btn" onclick="alert('Function A placeholder')">Function A</button>
+        <button class="btn" onclick="alert('Function B placeholder')">Function B</button>
+        <button class="btn" onclick="alert('Function C placeholder')">Function C</button>
+        <div style="flex:1"></div>
+        <div style="font-size:12px; color:rgba(255,255,255,0.6);">Status: Ready</div>
+      </div>
+
+      <div class="content" aria-hidden="false">
+        <div class="panel-box">
+          <div style="font-weight:700; margin-bottom:8px;">Overview</div>
+          <div style="color:rgba(255,255,255,0.8);">This is the main GUI area. Replace placeholders with real controls and data.</div>
+        </div>
+
+        <div style="display:flex; gap:12px;">
+          <div class="panel-box" style="flex:1;">
+            <div style="font-weight:700; margin-bottom:8px;">Panel 1</div>
+            <div style="color:rgba(255,255,255,0.8);">Controls, lists, or other UI elements go here.</div>
+          </div>
+          <div class="panel-box" style="width:260px;">
+            <div style="font-weight:700; margin-bottom:8px;">Panel 2</div>
+            <div style="color:rgba(255,255,255,0.8);">Secondary content.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
 <script>
-(function () {
- const gui = document.getElementById('gui');
- const top = document.getElementById('guiTop');
- const closeBtn = document.getElementById('closeBtn');
- const toggle = document.getElementById('ghostToggle');
+/*
+  Loader behavior:
+  - increments percent by 1 every 75ms, starting from 1 up to 100 (7.5s total)
+  - updates progress-fill width and percent text
+  - ghost icon pulses via CSS
+  - particles spawn while loading
+  - on 100%: fade out loader (0.5s) and show main GUI
+*/
 
- // Restore saved position
- try {
-   const saved = JSON.parse(localStorage.getItem('ghostClientPos') || 'null');
-   if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
-     applyPosition(saved.left, saved.top);
-   }
- } catch (e) {}
+(function(){
+  const fill = document.getElementById('progressFill');
+  const pct = document.getElementById('percentText');
+  const loaderWrap = document.getElementById('loaderWrap');
+  const readyOverlay = document.getElementById('readyOverlay');
+  const mainGui = document.getElementById('mainGui');
+  const particlesRoot = document.getElementById('particles');
 
- function applyPosition(left, topPx) {
-   gui.style.left = left + 'px';
-   gui.style.top = topPx + 'px';
-   gui.classList.add('dragged');
- }
+  let percent = 0;
+  const intervalMs = 75; // 0.075s per 1%
+  const max = 100;
 
- function openGui() {
-   toggle.classList.add('hidden');
-   requestAnimationFrame(() => gui.classList.remove('hidden'));
- }
- function closeGui() {
-   gui.classList.add('hidden');
-   setTimeout(() => toggle.classList.remove('hidden'), 180);
- }
+  // Spawn particles
+  function spawnParticles(count=12){
+    for(let i=0;i<count;i++){
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const left = 30 + Math.random()*40; // percent
+      const top = 30 + Math.random()*40; // percent
+      const size = 3 + Math.random()*6;
+      p.style.left = left + '%';
+      p.style.top = top + '%';
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      const dur = 3 + Math.random()*4; // 3-7s
+      const delay = Math.random()*1.2; // 0-1.2s
+      p.style.animationDuration = dur + 's';
+      p.style.animationDelay = delay + 's';
+      particlesRoot.appendChild(p);
+      // remove after animation completes
+      setTimeout(()=> { p.remove(); }, (dur + delay + 0.5) * 1000);
+    }
+  }
 
- closeBtn.addEventListener('click', (e) => {
-   e.stopPropagation();
-   closeGui();
- });
- toggle.addEventListener('click', openGui);
+  // spawn periodically while loading
+  const particleSpawner = setInterval(()=> { spawnParticles(6); }, 900);
 
- // Drag
- let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  // Progress increment timer
+  const timer = setInterval(()=> {
+    percent = Math.min(max, percent + 1);
+    fill.style.width = percent + '%';
+    pct.textContent = percent + '%';
+    document.querySelector('.progress-bar').setAttribute('aria-valuenow', percent);
 
- function startDrag(clientX, clientY) {
-   const rect = gui.getBoundingClientRect();
-   applyPosition(rect.left, rect.top);
-   dragging = true;
-   sx = clientX; sy = clientY;
-   ox = rect.left; oy = rect.top;
- }
+    if(percent >= max){
+      clearInterval(timer);
+      clearInterval(particleSpawner);
+      // fade out loader
+      loaderWrap.classList.add('fade-out');
+      // after fade duration (0.5s) hide loader and show main GUI
+      setTimeout(()=> {
+        loaderWrap.style.display = 'none';
+        readyOverlay.classList.add('show');
+        // small delay to let Ready be visible, then show main GUI
+        setTimeout(()=> {
+          readyOverlay.classList.remove('show');
+          mainGui.classList.add('show');
+          // mark aria
+          document.getElementById('loaderWrap').setAttribute('aria-hidden','true');
+          document.getElementById('mainGui').setAttribute('aria-hidden','false');
+        }, 600);
+      }, 500);
+    }
+  }, intervalMs);
 
- function moveDrag(clientX, clientY) {
-   if (!dragging) return;
-   let nx = ox + (clientX - sx);
-   let ny = oy + (clientY - sy);
-   const w = gui.offsetWidth, h = gui.offsetHeight;
-   nx = Math.max(0, Math.min(window.innerWidth - w, nx));
-   ny = Math.max(0, Math.min(window.innerHeight - h, ny));
-   applyPosition(nx, ny);
- }
+  // Accessibility: allow skipping to end with Escape
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape'){
+      percent = max;
+      fill.style.width = percent + '%';
+      pct.textContent = percent + '%';
+      clearInterval(timer);
+      clearInterval(particleSpawner);
+      loaderWrap.classList.add('fade-out');
+      setTimeout(()=> {
+        loaderWrap.style.display = 'none';
+        readyOverlay.classList.add('show');
+        setTimeout(()=> {
+          readyOverlay.classList.remove('show');
+          mainGui.classList.add('show');
+          document.getElementById('loaderWrap').setAttribute('aria-hidden','true');
+          document.getElementById('mainGui').setAttribute('aria-hidden','false');
+        }, 600);
+      }, 500);
+    }
+  });
 
- function endDrag() {
-   if (!dragging) return;
-   dragging = false;
-   try {
-     localStorage.setItem('ghostClientPos', JSON.stringify({
-       left: gui.offsetLeft, top: gui.offsetTop
-     }));
-   } catch (e) {}
- }
-
- top.addEventListener('mousedown', (e) => {
-   if (e.target === closeBtn) return;
-   startDrag(e.clientX, e.clientY);
- });
- window.addEventListener('mousemove', (e) => moveDrag(e.clientX, e.clientY));
- window.addEventListener('mouseup', endDrag);
-
- top.addEventListener('touchstart', (e) => {
-   if (e.target === closeBtn) return;
-   const t = e.touches[0];
-   startDrag(t.clientX, t.clientY);
- }, { passive: true });
- window.addEventListener('touchmove', (e) => {
-   const t = e.touches[0];
-   if (t) moveDrag(t.clientX, t.clientY);
-
-}, { passive: true });
- window.addEventListener('touchend', endDrag);
 })();
 </script>
 </body>
