@@ -1,271 +1,355 @@
-<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>GHOST CLIENT — Loading</title>
-<style>
-  :root{
-    --bg1:#0a0a12;
-    --bg2:#12121e;
-    --panel:#0f0f1a;
-    --muted:#22222e;
-    --accent:#00ccff;
-    --white:#ffffff;
-    --radius:12px;
-    --shadow: 0 8px 24px rgba(0,0,0,0.6);
-  }
+-- LocalScript: safe_console_gui.lua
+-- Место: StarterPlayerScripts или StarterGui (LocalScript)
+-- Автор: исправленный скрипт для безопасного создания GUI при вводе /console
 
-  html,body{height:100%;margin:0;font-family: "Montserrat", "Gotham", system-ui, -apple-system, "Segoe UI", Roboto, Arial; background: linear-gradient(180deg,var(--bg1),var(--bg2)); color:var(--white); overflow:hidden; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+--[[
+  Что было исправлено (комментарии внутри кода также отмечают места исправлений):
+  - Убраны все опасные вызовы в первой строке (game:HttpGet, loadstring, syn.request и т.д.).
+  - Первая строка теперь безопасна: получаем LocalPlayer через GetService и проверяем.
+  - Все WaitForChild имеют таймауты; критичные участки обёрнуты в pcall.
+  - Добавлен fallback: CoreGui (в pcall) или StarterGui, если PlayerGui не доступен.
+  - Добавлены debug/warn сообщения.
+  - Обработчик чата защищён от ошибок.
+--]]
 
-  /* Loader container */
-  .loader-wrap{
-    position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:100;
-    transition:opacity .5s ease, visibility .5s ease;
-  }
+-- Безопасное получение LocalPlayer (первая строка безопасна)
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
 
-  /* Vignette / veil */
-  .veil{position:absolute; inset:0; pointer-events:none; background: radial-gradient(60% 60% at 50% 40%, rgba(255,255,255,0.02), transparent 20%), linear-gradient(180deg, rgba(0,0,0,0.12), transparent 40%); mix-blend-mode: overlay; filter: blur(6px);}
+print("[DEBUG] Скрипт запущен")
 
-  /* Card */
-  .hud-card{
-    width:820px; max-width:92%; padding:48px 56px; border-radius:16px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; gap:28px; position:relative; backdrop-filter: blur(6px); border:1px solid rgba(255,255,255,0.03);
-  }
-  .hud-card::after{content:""; position:absolute; inset:0; border-radius:16px; pointer-events:none; box-shadow: 0 0 40px 6px rgba(0,204,255,0.03) inset;}
+-- Проверяем LocalPlayer; если нет — завершаем (LocalScript должен выполняться на клиенте)
+local player = Players.LocalPlayer
+if not player then
+    -- В некоторых окружениях LocalPlayer может быть nil на очень ранней стадии.
+    -- Попробуем дождаться его появления в течение короткого времени.
+    local ok, lp = pcall(function()
+        return Players:WaitForChild("LocalPlayer", 2)
+    end)
+    if ok and lp then
+        player = lp
+    else
+        warn("[ERROR] LocalPlayer не найден. Скрипт завершает работу.")
+        return
+    end
+end
 
-  /* Logo */
-  .logo{display:flex; flex-direction:column; align-items:center; gap:8px; position:relative;}
-  .title-large{font-weight:800; letter-spacing:6px; font-size:56px; color:var(--white); text-shadow: 0 6px 18px rgba(0,0,0,0.6), 0 0 18px rgba(0,204,255,0.06); display:flex; align-items:center; gap:12px;}
-  .title-small{font-weight:700; font-size:18px; color:rgba(255,255,255,0.9); text-shadow: 0 6px 18px rgba(0,0,0,0.6); letter-spacing:4px;}
+-- Функция безопасного ожидания дочернего объекта с таймаутом и проверкой
+local function safeWait(parent, childName, timeout)
+    if not parent then return nil end
+    timeout = timeout or 2
+    local ok, result = pcall(function()
+        return parent:WaitForChild(childName, timeout)
+    end)
+    if ok then
+        return result
+    else
+        return nil
+    end
+end
 
-  /* Ghost inline */
-  .ghost-inline{width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; filter: drop-shadow(0 6px 12px rgba(0,0,0,0.6));}
-  .ghost-svg{width:100%; height:100%; display:block; fill:#ffffff; opacity:0.98; filter: drop-shadow(0 6px 18px rgba(0,204,255,0.08));}
+-- Попытка получить PlayerGui с таймаутом 5 секунд (требование)
+local function getPlayerGuiWithFallback(player)
+    -- Сначала пробуем стандартный путь
+    local playerGui = safeWait(player, "PlayerGui", 5)
+    if playerGui then
+        return playerGui, "PlayerGui"
+    end
 
-  /* Particles */
-  .particles{position:absolute; top:18%; left:50%; transform:translateX(-50%); width:60%; height:60%; pointer-events:none; overflow:visible;}
-  .particle{position:absolute; width:6px; height:6px; background: linear-gradient(180deg, rgba(0,204,255,0.95), rgba(255,255,255,0.9)); border-radius:50%; opacity:0; filter: blur(0.6px); box-shadow: 0 0 10px rgba(0,204,255,0.12); animation: floatUp linear infinite;}
-  @keyframes floatUp{0%{ transform: translateY(0) scale(0.8); opacity:0;} 10%{opacity:0.9;} 100%{ transform: translateY(-160px) scale(1.2); opacity:0;}}
+    -- Если PlayerGui не появился — пробуем CoreGui (в pcall, т.к. в обычной среде доступ может быть запрещён)
+    local ok, cg = pcall(function()
+        -- В обычной Roblox LocalScript не может родительствовать в CoreGui,
+        -- но в некоторых окружениях/эксплойтах это возможно — пробуем.
+        return CoreGui
+    end)
+    if ok and cg then
+        return cg, "CoreGui"
+    end
 
-  /* Progress row */
-  .progress-row{width:100%; display:flex; align-items:center; gap:14px; justify-content:center; margin-top:6px;}
-  .ghost-small{width:20px; height:20px; display:inline-block; transform-origin:center; animation: ghostPulse 0.5s ease-in-out infinite;}
-  @keyframes ghostPulse{0%{ transform: scale(1); opacity:1;} 50%{ transform: scale(1.3); opacity:0.8;} 100%{ transform: scale(1); opacity:1;}}
+    -- В крайнем случае используем StarterGui как запасной контейнер (не всегда отображается, но безопасно)
+    return StarterGui, "StarterGui"
+end
 
-  .progress-bar{width:380px; height:14px; background:var(--muted); border-radius:12px; position:relative; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.03);}
-  .progress-fill{position:absolute; left:0; top:0; bottom:0; width:0%; background: linear-gradient(90deg, rgba(255,255,255,0.95), var(--accent)); box-shadow: 0 0 18px rgba(0,204,255,0.28); border-radius:12px; transition: width 0.07s linear;}
-  .percent{min-width:48px; text-align:left; font-weight:700; color:var(--white); text-shadow: 0 6px 18px rgba(0,0,0,0.6); font-size:14px; letter-spacing:1px;}
+-- Функция создания GUI (всё в pcall)
+local function createGui(parent)
+    if not parent then
+        return false, "parent is nil"
+    end
 
-  /* Fade out */
-  .fade-out{opacity:0; visibility:hidden;}
+    local success, err = pcall(function()
+        -- Создаём ScreenGui
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "GHOST_CLIENT_GUI"
+        screenGui.ResetOnSpawn = false
+        screenGui.Enabled = true
+        -- IgnoreGuiInset доступно только в некоторых средах; ставим в pcall
+        if screenGui:IsA("ScreenGui") then
+            -- Безопасно установить свойство, если оно существует
+            pcall(function() screenGui.IgnoreGuiInset = true end)
+        end
 
-  /* Main GUI (appears after loading) */
-  .main-gui{position:fixed; inset:0; display:flex; align-items:flex-start; justify-content:center; padding-top:48px; z-index:80; opacity:0; pointer-events:none; transition:opacity .4s ease;}
-  .main-gui.show{opacity:1; pointer-events:auto;}
-  .main-panel{width:920px; max-width:94%; padding:28px; border-radius:14px; background: linear-gradient(180deg, rgba(15,15,26,0.9), rgba(10,10,18,0.85)); box-shadow: 0 12px 40px rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.03); color:var(--white); display:flex; gap:20px;}
-  .sidebar{width:220px; background: rgba(255,255,255,0.02); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px;}
-  .content{flex:1; padding:12px; display:flex; flex-direction:column; gap:12px;}
-  .btn{height:44px; border-radius:10px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.03); display:flex; align-items:center; justify-content:center; color:var(--white); font-weight:700; cursor:pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.5);}
-  .btn:active{transform:translateY(1px);}
-  .panel-box{background: rgba(255,255,255,0.01); border-radius:10px; padding:12px; min-height:120px; border:1px solid rgba(255,255,255,0.02);}
+        -- Создаём центральную панель
+        local mainFrame = Instance.new("Frame")
+        mainFrame.Name = "MainFrame"
+        mainFrame.Size = UDim2.new(0, 520, 0, 220)
+        mainFrame.Position = UDim2.new(0.5, -260, 0.5, -110)
+        mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+        mainFrame.BackgroundTransparency = 0.12
+        mainFrame.BackgroundColor3 = Color3.fromHex("0f0f1a")
+        mainFrame.BorderSizePixel = 0
+        mainFrame.Parent = screenGui
+        -- Скруглённые углы (UICorner)
+        local uiCorner = Instance.new("UICorner")
+        uiCorner.CornerRadius = UDim.new(0, 12)
+        uiCorner.Parent = mainFrame
 
-  /* Ready overlay text */
-  .ready-overlay{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; opacity:0; transition:opacity .4s ease; z-index:90;}
-  .ready-overlay.show{opacity:1;}
-  .ready-text{font-size:28px; font-weight:800; background: linear-gradient(90deg, rgba(255,255,255,0.98), rgba(200,220,255,0.9)); -webkit-background-clip:text; background-clip:text; color:transparent; text-shadow: 0 8px 30px rgba(0,0,0,0.6);}
+        -- Заголовок: GHO👻T CLIENT (замена S на иконку призрака)
+        local title = Instance.new("TextLabel")
+        title.Name = "Title"
+        title.Size = UDim2.new(1, -40, 0, 64)
+        title.Position = UDim2.new(0, 20, 0, 18)
+        title.BackgroundTransparency = 1
+        title.TextColor3 = Color3.new(1,1,1)
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 36
+        title.Text = "GHO" .. "👻" .. "T CLIENT" -- иконка призрака вместо S
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = mainFrame
 
-  /* Responsive */
-  @media (max-width:720px){
-    .hud-card{padding:28px 20px;}
-    .title-large{font-size:36px;}
-    .progress-bar{width:300px;}
-    .main-panel{flex-direction:column; align-items:stretch;}
-    .sidebar{width:100%;}
-  }
-</style>
-</head>
-<body>
-  <!-- Loader -->
-  <div class="loader-wrap" id="loaderWrap" aria-hidden="false">
-    <div class="veil"></div>
+        -- Подзаголовок CLIENT (меньшим шрифтом)
+        local subtitle = Instance.new("TextLabel")
+        subtitle.Name = "Subtitle"
+        subtitle.Size = UDim2.new(1, -40, 0, 24)
+        subtitle.Position = UDim2.new(0, 20, 0, 78)
+        subtitle.BackgroundTransparency = 1
+        subtitle.TextColor3 = Color3.new(1,1,1)
+        subtitle.Font = Enum.Font.GothamSemibold
+        subtitle.TextSize = 16
+        subtitle.Text = "CLIENT"
+        subtitle.TextXAlignment = Enum.TextXAlignment.Left
+        subtitle.Parent = mainFrame
 
-    <div class="hud-card" role="dialog" aria-label="GHOST CLIENT loading screen">
-      <div class="particles" id="particles"></div>
+        -- Иконка призрака слева от прогресс-бара (20x20)
+        local ghostIcon = Instance.new("TextLabel")
+        ghostIcon.Name = "GhostIcon"
+        ghostIcon.Size = UDim2.new(0, 20, 0, 20)
+        ghostIcon.Position = UDim2.new(0, 20, 1, -48)
+        ghostIcon.AnchorPoint = Vector2.new(0, 1)
+        ghostIcon.BackgroundTransparency = 1
+        ghostIcon.Text = "👻"
+        ghostIcon.Font = Enum.Font.SourceSansBold
+        ghostIcon.TextSize = 18
+        ghostIcon.TextColor3 = Color3.new(1,1,1)
+        ghostIcon.Parent = mainFrame
 
-      <div class="logo" aria-hidden="true">
-        <div class="title-large" aria-hidden="true">
-          <span>GHO</span>
-          <span class="ghost-inline" aria-hidden="true">
-            <svg class="ghost-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M32 2C20.954 2 12 10.954 12 22v18c0 4.418 3.582 8 8 8 1.657 0 3.157-.672 4.243-1.757L32 44l7.757 2.243C41.843 47.328 43.343 48 45 48c4.418 0 8-3.582 8-8V22C56 10.954 47.046 2 36 2H32z"/>
-            </svg>
-          </span>
-          <span>T</span>
-          <span style="opacity:0.9; margin-left:8px;">CLIENT</span>
-        </div>
+        -- Прогресс-бар (фон)
+        local progressBg = Instance.new("Frame")
+        progressBg.Name = "ProgressBg"
+        progressBg.Size = UDim2.new(0, 380, 0, 14) -- 350-400 px, выбрано 380
+        progressBg.Position = UDim2.new(0, 52, 1, -52)
+        progressBg.AnchorPoint = Vector2.new(0, 1)
+        progressBg.BackgroundColor3 = Color3.fromHex("22222e")
+        progressBg.BorderSizePixel = 0
+        progressBg.Parent = mainFrame
+        local bgCorner = Instance.new("UICorner")
+        bgCorner.CornerRadius = UDim.new(0, 12)
+        bgCorner.Parent = progressBg
 
-        <div class="title-small" aria-hidden="true">CLIENT</div>
-      </div>
+        -- Прогресс-бар (заполнение)
+        local progressFill = Instance.new("Frame")
+        progressFill.Name = "ProgressFill"
+        progressFill.Size = UDim2.new(0, 0, 1, 0) -- начальное 0%
+        progressFill.Position = UDim2.new(0, 0, 0, 0)
+        progressFill.BackgroundColor3 = Color3.fromHex("00ccff")
+        progressFill.BorderSizePixel = 0
+        progressFill.Parent = progressBg
+        local fillCorner = Instance.new("UICorner")
+        fillCorner.CornerRadius = UDim.new(0, 12)
+        fillCorner.Parent = progressFill
 
-      <div class="progress-row" aria-hidden="true">
-        <div class="ghost-small" aria-hidden="true">
-          <svg class="ghost-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M32 2C20.954 2 12 10.954 12 22v18c0 4.418 3.582 8 8 8 1.657 0 3.157-.672 4.243-1.757L32 44l7.757 2.243C41.843 47.328 43.343 48 45 48c4.418 0 8-3.582 8-8V22C56 10.954 47.046 2 36 2H32z"/>
-          </svg>
-        </div>
+        -- Проценты справа от полосы
+        local percentLabel = Instance.new("TextLabel")
+        percentLabel.Name = "Percent"
+        percentLabel.Size = UDim2.new(0, 48, 0, 20)
+        percentLabel.Position = UDim2.new(0, 444, 1, -52)
+        percentLabel.AnchorPoint = Vector2.new(0, 1)
+        percentLabel.BackgroundTransparency = 1
+        percentLabel.Text = "0%"
+        percentLabel.Font = Enum.Font.GothamBold
+        percentLabel.TextSize = 14
+        percentLabel.TextColor3 = Color3.new(1,1,1)
+        percentLabel.Parent = mainFrame
 
-        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Loading progress">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
+        -- Скрываем GUI по умолчанию; будем показывать при команде /console
+        screenGui.Enabled = false
 
-        <div class="percent" id="percentText">0%</div>
-      </div>
-    </div>
-  </div>
+        -- Сохраняем ссылки в объекте для удобства
+        screenGui:SetAttribute("ProgressFill", progressFill:GetDebugId()) -- debug id для отладки (необязательно)
+        screenGui.Parent = parent
+        -- Возвращаем созданный GUI
+        return screenGui
+    end)
 
-  <!-- Ready overlay -->
-  <div class="ready-overlay" id="readyOverlay" aria-hidden="true">
-    <div class="ready-text">Ready</div>
-  </div>
+    if not success then
+        return false, tostring(err)
+    end
 
-  <!-- Main GUI (appears after loading) -->
-  <div class="main-gui" id="mainGui" aria-hidden="true">
-    <div class="main-panel" role="application" aria-label="GHOST CLIENT main interface">
-      <div class="sidebar" aria-hidden="false">
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-          <div style="width:28px; height:28px;">
-            <svg class="ghost-svg" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M32 2C20.954 2 12 10.954 12 22v18c0 4.418 3.582 8 8 8 1.657 0 3.157-.672 4.243-1.757L32 44l7.757 2.243C41.843 47.328 43.343 48 45 48c4.418 0 8-3.582 8-8V22C56 10.954 47.046 2 36 2H32z"/>
-            </svg>
-          </div>
-          <div style="font-weight:800; letter-spacing:2px;">GHOST CLIENT</div>
-        </div>
+    return true
+end
 
-        <button class="btn" onclick="alert('Function A placeholder')">Function A</button>
-        <button class="btn" onclick="alert('Function B placeholder')">Function B</button>
-        <button class="btn" onclick="alert('Function C placeholder')">Function C</button>
-        <div style="flex:1"></div>
-        <div style="font-size:12px; color:rgba(255,255,255,0.6);">Status: Ready</div>
-      </div>
+-- Функция безопасного показа GUI (в pcall)
+local function showGui(gui)
+    if not gui then return false, "gui is nil" end
+    local ok, err = pcall(function()
+        gui.Enabled = true
+    end)
+    if not ok then
+        return false, tostring(err)
+    end
+    return true
+end
 
-      <div class="content" aria-hidden="false">
-        <div class="panel-box">
-          <div style="font-weight:700; margin-bottom:8px;">Overview</div>
-          <div style="color:rgba(255,255,255,0.8);">This is the main GUI area. Replace placeholders with real controls and data.</div>
-        </div>
+-- Основная логика: подготовка GUI и обработка команды /console
+local guiContainer, containerName = getPlayerGuiWithFallback(player)
+print(("[DEBUG] GUI контейнер выбран: %s"):format(tostring(containerName)))
 
-        <div style="display:flex; gap:12px;">
-          <div class="panel-box" style="flex:1;">
-            <div style="font-weight:700; margin-bottom:8px;">Panel 1</div>
-            <div style="color:rgba(255,255,255,0.8);">Controls, lists, or other UI elements go here.</div>
-          </div>
-          <div class="panel-box" style="width:260px;">
-            <div style="font-weight:700; margin-bottom:8px;">Panel 2</div>
-            <div style="color:rgba(255,255,255,0.8);">Secondary content.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+-- Создаём GUI в pcall и логируем результат
+local createdGui
+local ok, createErr = pcall(function()
+    local success, err = createGui(guiContainer)
+    if not success then
+        error(err or "unknown createGui error")
+    end
+end)
 
-<script>
-/*
-  Loader behavior:
-  - increments percent by 1 every 75ms, starting from 1 up to 100 (7.5s total)
-  - updates progress-fill width and percent text
-  - ghost icon pulses via CSS
-  - particles spawn while loading
-  - on 100%: fade out loader (0.5s) and show main GUI
-*/
+if not ok then
+    warn("[ERROR] Причина: " .. tostring(createErr))
+else
+    print("[DEBUG] GUI успешно создан (или помещён в контейнер).")
+    -- Получаем ссылку на созданный GUI (если parent — PlayerGui/CoreGui/StarterGui)
+    -- Ищем по имени "GHOST_CLIENT_GUI"
+    local foundGui = nil
+    -- Попробуем безопасно получить GUI (pcall)
+    pcall(function()
+        if guiContainer then
+            foundGui = guiContainer:FindFirstChild("GHOST_CLIENT_GUI")
+        end
+    end)
+    createdGui = foundGui
+end
 
-(function(){
-  const fill = document.getElementById('progressFill');
-  const pct = document.getElementById('percentText');
-  const loaderWrap = document.getElementById('loaderWrap');
-  const readyOverlay = document.getElementById('readyOverlay');
-  const mainGui = document.getElementById('mainGui');
-  const particlesRoot = document.getElementById('particles');
+-- Функция запуска анимации прогресс-бара (1% -> 100% за 7.5 секунд)
+local function runProgressAnimation(gui)
+    if not gui then return end
+    local progressFill = nil
+    local percentLabel = nil
+    -- Безопасно получить элементы
+    pcall(function()
+        local main = gui:FindFirstChild("MainFrame")
+        if main then
+            progressFill = main:FindFirstChild("ProgressBg") and main.ProgressBg:FindFirstChild("ProgressFill")
+            percentLabel = main:FindFirstChild("Percent")
+        end
+    end)
+    if not progressFill or not percentLabel then
+        warn("[ERROR] Не удалось найти элементы прогресс-бара внутри GUI.")
+        return
+    end
 
-  let percent = 0;
-  const intervalMs = 75; // 0.075s per 1%
-  const max = 100;
+    -- Анимация: 1% каждые 0.075 с => 100% за 7.5 с
+    local percent = 0
+    local stepMs = 75 -- миллисекунд
+    -- Убедимся, что предыдущие анимации не выполняются (если нужно, можно добавить флаг)
+    local running = true
+    -- В Roblox нет точного sleep в LocalScript, используем RunService.Heartbeat
+    local accumulated = 0
+    local conn
+    conn = RunService.Heartbeat:Connect(function(dt)
+        if not running then
+            if conn then conn:Disconnect() end
+            return
+        end
+        accumulated = accumulated + dt * 1000
+        while accumulated >= stepMs and percent < 100 do
+            accumulated = accumulated - stepMs
+            percent = percent + 1
+            -- Обновляем UI в pcall
+            pcall(function()
+                progressFill.Size = UDim2.new(percent / 100, 0, 1, 0)
+                percentLabel.Text = tostring(percent) .. "%"
+            end)
+        end
 
-  // Spawn particles
-  function spawnParticles(count=12){
-    for(let i=0;i<count;i++){
-      const p = document.createElement('div');
-      p.className = 'particle';
-      const left = 30 + Math.random()*40; // percent
-      const top = 30 + Math.random()*40; // percent
-      const size = 3 + Math.random()*6;
-      p.style.left = left + '%';
-      p.style.top = top + '%';
-      p.style.width = size + 'px';
-      p.style.height = size + 'px';
-      const dur = 3 + Math.random()*4; // 3-7s
-      const delay = Math.random()*1.2; // 0-1.2s
-      p.style.animationDuration = dur + 's';
-      p.style.animationDelay = delay + 's';
-      particlesRoot.appendChild(p);
-      // remove after animation completes
-      setTimeout(()=> { p.remove(); }, (dur + delay + 0.5) * 1000);
-    }
-  }
+        if percent >= 100 then
+            running = false
+            if conn then conn:Disconnect() end
+            -- Плавное скрытие GUI (fade out) — простая реализация: отключаем Enabled
+            pcall(function()
+                gui.Enabled = false
+            end)
+            print("[DEBUG] Загрузка завершена, GUI скрыт.")
+            -- Здесь можно открыть основную GUI с функциями (если требуется)
+            -- В примере мы просто включаем GUI снова как демонстрацию (или можно заменить)
+            -- pcall(function() gui.Enabled = true end)
+        end
+    end)
+end
 
-  // spawn periodically while loading
-  const particleSpawner = setInterval(()=> { spawnParticles(6); }, 900);
+-- Обработчик команды /console
+local function onChat(msg)
+    if type(msg) ~= "string" then return end
+    local lower = msg:lower()
+    -- Поддерживаем команды, начинающиеся с "/console" (включая параметры)
+    if lower:match("^/console") then
+        -- В pcall, чтобы не падать при ошибках
+        local ok, err = pcall(function()
+            if not createdGui then
+                -- Попробуем найти GUI ещё раз (вдруг был создан поздно)
+                createdGui = nil
+                if guiContainer then
+                    createdGui = guiContainer:FindFirstChild("GHOST_CLIENT_GUI")
+                end
+                if not createdGui then
+                    -- Попробуем создать заново
+                    local success, createErr = createGui(guiContainer)
+                    if not success then
+                        error(createErr or "failed to create GUI on /console")
+                    end
+                    createdGui = guiContainer:FindFirstChild("GHOST_CLIENT_GUI")
+                end
+            end
 
-  // Progress increment timer
-  const timer = setInterval(()=> {
-    percent = Math.min(max, percent + 1);
-    fill.style.width = percent + '%';
-    pct.textContent = percent + '%';
-    document.querySelector('.progress-bar').setAttribute('aria-valuenow', percent);
+            -- Показываем GUI и запускаем прогресс
+            local shown, showErr = showGui(createdGui)
+            if not shown then
+                error(showErr or "failed to enable GUI")
+            end
 
-    if(percent >= max){
-      clearInterval(timer);
-      clearInterval(particleSpawner);
-      // fade out loader
-      loaderWrap.classList.add('fade-out');
-      // after fade duration (0.5s) hide loader and show main GUI
-      setTimeout(()=> {
-        loaderWrap.style.display = 'none';
-        readyOverlay.classList.add('show');
-        // small delay to let Ready be visible, then show main GUI
-        setTimeout(()=> {
-          readyOverlay.classList.remove('show');
-          mainGui.classList.add('show');
-          // mark aria
-          document.getElementById('loaderWrap').setAttribute('aria-hidden','true');
-          document.getElementById('mainGui').setAttribute('aria-hidden','false');
-        }, 600);
-      }, 500);
-    }
-  }, intervalMs);
+            -- Запускаем анимацию прогресс-бара
+            runProgressAnimation(createdGui)
+        end)
 
-  // Accessibility: allow skipping to end with Escape
-  window.addEventListener('keydown', (e)=>{
-    if(e.key === 'Escape'){
-      percent = max;
-      fill.style.width = percent + '%';
-      pct.textContent = percent + '%';
-      clearInterval(timer);
-      clearInterval(particleSpawner);
-      loaderWrap.classList.add('fade-out');
-      setTimeout(()=> {
-        loaderWrap.style.display = 'none';
-        readyOverlay.classList.add('show');
-        setTimeout(()=> {
-          readyOverlay.classList.remove('show');
-          mainGui.classList.add('show');
-          document.getElementById('loaderWrap').setAttribute('aria-hidden','true');
-          document.getElementById('mainGui').setAttribute('aria-hidden','false');
-        }, 600);
-      }, 500);
-    }
-  });
+        if not ok then
+            -- Логируем ошибку безопасно
+            warn("[ERROR] Причина: " .. tostring(err))
+        else
+            print("[DEBUG] Обработана команда /console")
+        end
+    end
+end
 
-})();
-</script>
-</body>
-</html>
+-- Подключаем обработчик чата безопасно
+local chatConnOk, chatConnErr = pcall(function()
+    -- Players.LocalPlayer:Chatted exists в LocalScript
+    player.Chatted:Connect(onChat)
+end)
+if not chatConnOk then
+    warn("[ERROR] Не удалось подключить обработчик чата: " .. tostring(chatConnErr))
+else
+    print("[DEBUG] Обработчик чата подключён")
+end
+
+-- Скрипт готов
+print("[DEBUG] Скрипт инициализирован")
