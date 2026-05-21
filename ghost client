@@ -76,84 +76,77 @@ end
 enableAntiReset()
 
 -- ============================================
--- ПОИСК ЗОНЫ СБОРА (ближайшая к игроку = своя)
+-- ПОИСК ЗЕЛЁНОЙ ПЛАТФОРМЫ (зона сбора)
 -- ============================================
 local stealZonePos  = nil
 local foundZoneName = "Не найдено"
 
-local STEAL_KEYWORDS = {
-    "steal", "stealzone", "steal_zone", "stealarea",
-    "collect", "collection", "collectzone",
-    "base", "mybase", "home", "homebase",
-    "drop", "dropzone", "drop_zone",
-    "score", "deliver", "zone",
-    "capture", "brainrot"
-}
+local GREEN_COLOR_TOLERANCE = 0.2  -- допуск для зелёного цвета
 
-local function getAllZones()
-    local results = {}
-
-    local function searchIn(parent, depth)
-        if depth > 6 then return end
-        for _, obj in ipairs(parent:GetChildren()) do
-            pcall(function()
-                if obj:IsA("BasePart") or obj:IsA("Model") or obj:IsA("Folder") then
-                    local nameLower = obj.Name:lower()
-                    for _, kw in ipairs(STEAL_KEYWORDS) do
-                        if nameLower:find(kw) then
-                            local pos = nil
-                            if obj:IsA("BasePart") then
-                                pos = obj.Position
-                            elseif obj:IsA("Model") then
-                                if obj.PrimaryPart then
-                                    pos = obj.PrimaryPart.Position
-                                else
-                                    for _, p in ipairs(obj:GetDescendants()) do
-                                        if p:IsA("BasePart") then
-                                            pos = p.Position
-                                            break
-                                        end
-                                    end
-                                end
-                            end
-                            if pos then
-                                table.insert(results, {
-                                    name = obj.Name,
-
-pos  = pos
-                                })
-                            end
-                            break
-                        end
-                    end
-                end
-            end)
-            searchIn(obj, depth + 1)
-        end
-    end
-
-    searchIn(workspace, 0)
-    return results
+local function isGreen(color)
+    -- Проверяем: G > R и G > B (зелёный преобладает)
+    return color.G > color.R + GREEN_COLOR_TOLERANCE and 
+           color.G > color.B + GREEN_COLOR_TOLERANCE
 end
 
-local function findMyCollectZone()
+local function findGreenCollectZone()
     local char = player.Character
     local hrp  = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil, "Нет персонажа", 0 end
 
-    local myPos  = hrp.Position
-    local results = getAllZones()
+    local myPos = hrp.Position
+    local results = {}
 
-    if #results == 0 then
-        return nil, "Зон не найдено", 0
+    -- Рекурсивный поиск зелёных платформ
+    local function searchGreenParts(parent, depth)
+        if depth > 8 then return end
+        
+        for _, obj in ipairs(parent:GetChildren()) do
+            pcall(function()
+                if obj:IsA("BasePart") then
+                    -- Проверяем цвет части
+                    if isGreen(obj.Color) then
+                        -- Ищем текстовый лейбл "зона сбора" или похожее
+                        local hasLabel = false
+                        for _, child in ipairs(obj:GetDescendants()) do
+                            if child:IsA("TextLabel") or child:IsA("TextBox") then
+                                local text = child.Text:lower()
+                                if text:find("зона сбора") or text:find("collect") or 
+                                   text:find("zone") or text:find("стой") then
+                                    hasLabel = true
+                                    break
+                                end
+                            end
+                        end
+                        
+                        -- Если зелёная часть найдена
+                        if hasLabel or obj.Size.Magnitude > 5 then
+                            table.insert(results, {
+                                name = obj.Name,
+                                pos = obj.Position,
+                                part = obj
+                            })
+                        end
+                    end
+                elseif obj:IsA("Model") or obj:IsA("Folder") then
+                    searchGreenParts(obj, depth + 1)
+                end
+            end)
+        end
     end
 
-    -- Убираем дубликаты (ближе 10 студс)
+    searchGreenParts(workspace, 0)
+
+    if #results == 0 then
+        return nil, "Зелёная платформа не найдена", 0
+    end
+
+    -- Убираем дубликаты
     local unique = {}
     for _, r in ipairs(results) do
         local isDup = false
         for _, u in ipairs(unique) do
-            if (r.pos - u.pos).Magnitude < 10 then
+            if (r.pos - u.pos).Magnitude < 5 then
                 isDup = true
                 break
             end
@@ -163,20 +156,19 @@ local function findMyCollectZone()
         end
     end
 
-    -- Сортируем — БЛИЖАЙШАЯ зона = своя зона сбора
+    -- Сортируем по расстоянию — БЛИЖАЙШАЯ = своя
     table.sort(unique, function(a, b)
         return (a.pos - myPos).Magnitude < (b.pos - myPos).Magnitude
     end)
 
-    -- Берём ближайшую
     local best = unique[1]
 
-    -- Если уже стоим прямо на ней — берём следующую
-    if (best.pos - myPos).Magnitude < 8 and #unique > 1 then
+    -- Если стоим прямо на ней — берём следующую
+    if (best.pos - myPos).Magnitude < 6 and #unique > 1 then
         best = unique[2]
     end
 
-    stealZonePos  = best.pos
+    stealZonePos = best.pos
     foundZoneName = best.name
     return best.pos, best.name, #unique
 end
@@ -185,16 +177,16 @@ end
 -- ТЕЛЕПОРТ НА СВОЮ ЗОНУ
 -- ============================================
 local function doInstantSteal(setStatus, zoneNameLbl, zonePosLbl, stealBtn, stealStroke)
-    setStatus("🔍 Поиск зоны сбора...", Color3.fromRGB(255,220,50))
+    setStatus("🔍 Поиск зелёной платформы...", Color3.fromRGB(255,220,50))
     zoneNameLbl.Text = "Зона: поиск..."
     zonePosLbl.Text  = "Координаты: ..."
 
     task.wait(0.3)
 
-    local pos, name, count = findMyCollectZone()
+    local pos, name, count = findGreenCollectZone()
 
     if not pos then
-        setStatus("✗ Зона не найдена", Color3.fromRGB(255,80,80))
+        setStatus("✗ Платформа не найдена", Color3.fromRGB(255,80,80))
         zoneNameLbl.Text = "Зона: не найдена"
         zonePosLbl.Text  = "Координаты: —"
         tw(stealBtn, {BackgroundColor3=Color3.fromRGB(120,20,50)}, 0.1)
@@ -206,7 +198,7 @@ local function doInstantSteal(setStatus, zoneNameLbl, zonePosLbl, stealBtn, stea
 
     zoneNameLbl.Text = "Зона: " .. name
     zonePosLbl.Text  = string.format("X:%.0f  Y:%.0f  Z:%.0f", pos.X, pos.Y, pos.Z)
-    setStatus("✓ Найдено " .. count .. " зон | Телепорт...", Color3.fromRGB(80,255,150))
+    setStatus("✓ Найдено " .. count .. " платформ | Телепорт...", Color3.fromRGB(80,255,150))
 
     task.wait(0.15)
 
@@ -227,13 +219,13 @@ local function doInstantSteal(setStatus, zoneNameLbl, zonePosLbl, stealBtn, stea
         end
     end)
 
-    -- Телепортируем на свою зону сбора
-    local safePos = pos + Vector3.new(0, 5, 0)
+    -- Телепортируем на зелёную платформу
+    local safePos = pos + Vector3.new(0, 3, 0)
     hrp.CFrame = CFrame.new(safePos)
 
     -- Обнуляем скорость чтобы не улететь
-    pcall(function() hrp.Velocity        = Vector3.zero end)
-    pcall(function() hrp.RotVelocity     = Vector3.zero end)
+    pcall(function() hrp.Velocity = Vector3.zero end)
+    pcall(function() hrp.RotVelocity = Vector3.zero end)
 
     -- Восстанавливаем HP после
     task.delay(0.1, function()
@@ -244,7 +236,7 @@ local function doInstantSteal(setStatus, zoneNameLbl, zonePosLbl, stealBtn, stea
         end)
     end)
 
-    setStatus("✅ На зоне: " .. name, Color3.fromRGB(80,255,120))
+    setStatus("✅ На платформе: " .. name, Color3.fromRGB(80,255,120))
 
     tw(stealBtn, {BackgroundColor3=Color3.fromRGB(30,180,80)}, 0.15)
     task.delay(1.0, function()
@@ -370,9 +362,7 @@ zonePosLbl.Parent             = zoneCard
 -- Статус
 local statusLbl = Instance.new("TextLabel")
 statusLbl.Size               = UDim2.new(0.9,0,0.07,0)
-statusLbl.
-
-Position           = UDim2.new(0.05,0,0.36,0)
+statusLbl.Position           = UDim2.new(0.05,0,0.36,0)
 statusLbl.BackgroundColor3   = Color3.fromRGB(14,10,24)
 statusLbl.Text               = "Статус: ожидание"
 statusLbl.TextColor3         = Color3.fromRGB(120,100,160)
@@ -469,7 +459,7 @@ local footerLbl = Instance.new("TextLabel")
 footerLbl.Size               = UDim2.new(0.9,0,0.06,0)
 footerLbl.Position           = UDim2.new(0.05,0,0.92,0)
 footerLbl.BackgroundTransparency = 1
-footerLbl.Text               = "Телепорт на свою зону сбора"
+footerLbl.Text               = "Телепорт на зелёную платформу"
 footerLbl.TextColor3         = Color3.fromRGB(70,55,100)
 footerLbl.Font               = Enum.Font.Gotham
 footerLbl.TextScaled         = true
@@ -488,9 +478,7 @@ stealBtn.MouseButton1Click:Connect(function()
     tw(stealBtn, {
         Size     = UDim2.new(0.86,0,0.15,0),
         Position = UDim2.new(0.07,0,0.54,0)
-    }, 0.
-
-08)
+    }, 0.08)
     task.delay(0.08, function()
         tw(stealBtn, {
             Size     = UDim2.new(0.9,0,0.15,0),
@@ -582,4 +570,4 @@ end)
 task.wait(0.1)
 tw(main, {Position=UDim2.new(0.5,0,0.5,0)}, 0.5, Enum.EasingStyle.Back)
 
-print("[STEAL v3] Запущен! Телепорт на ближайшую зону сбора.")
+print("[STEAL v3] Запущен! Телепорт на зелёную платформу с зоной сбора.")
