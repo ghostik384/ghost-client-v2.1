@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>claht gpt</title>
+<style>
+:root{--bg:#fff;--fg:#0d0d0d;--mut:#6e6e73;--pill:#f2f2f4;--line:#e3e3e6;--acc:#1d7cf2;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000;--fg:#f2f2f2;--mut:#9b9ba1;--pill:#1c1c1e;--line:#2e2e31;--acc:#3d9bff}}
+:root[data-theme="dark"]{--bg:#000;--fg:#f2f2f2;--mut:#9b9ba1;--pill:#1c1c1e;--line:#2e2e31;--acc:#3d9bff}
+html,body{height:100%;margin:0}html{scroll-padding-top:env(safe-area-inset-top,0px)}[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);display:flex;flex-direction:column;max-width:760px;margin:0 auto;font:17px/1.5 -apple-system,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 0}.hr{display:flex;gap:10px}
+.pill,.circ{background:var(--pill);border:1px solid var(--line)}.pill{border-radius:999px;padding:11px 22px;font-size:20px;font-weight:600;color:var(--acc)}
+.circ{width:50px;height:50px;border-radius:50%;display:grid;place-items:center}.circ svg,.mem svg{width:24px;height:24px}
+#kp{margin:14px 14px 0}#kp .row{display:flex;gap:8px}#kp input{flex:1;min-width:0;font:inherit;font-size:16px;color:var(--fg);background:var(--pill);border:1px solid var(--line);border-radius:999px;padding:11px 18px}
+#kp .row button{background:var(--acc);color:#fff;border-radius:999px;padding:0 20px;font-weight:600}.kn{color:var(--mut);font-size:13px;padding:6px 8px 0}
+.mem{display:flex;justify-content:center;align-items:center;gap:10px;width:100%;margin-top:20px;color:var(--acc);font-size:19px;font-weight:600}
+#note{text-align:center;color:var(--mut);font-size:14px;padding:6px 24px 0}
+#chat{flex:1;overflow-y:auto;padding:16px 16px 8px;display:flex;flex-direction:column;gap:18px}
+.u{align-self:flex-end;max-width:85%;background:var(--pill);border-radius:22px;padding:10px 16px;white-space:pre-wrap;overflow-wrap:anywhere}.a{white-space:pre-wrap;overflow-wrap:anywhere}
+.a.wait:after{content:"●";animation:p 1s infinite}@keyframes p{50%{opacity:.2}}@media(prefers-reduced-motion:reduce){.a.wait:after{animation:none}}
+.err{color:#e5484d;font-size:15px}pre{white-space:pre;background:var(--pill);border:1px solid var(--line);border-radius:12px;padding:12px;overflow-x:auto;font-size:14px;line-height:1.45;margin:8px 0}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;background:var(--pill);padding:1px 5px;border-radius:6px}pre code{background:none;padding:0}
+#sg button{display:flex;align-items:center;gap:18px;width:100%;padding:13px 24px;font-size:20px;text-align:left}#sg svg{width:26px;height:26px;color:var(--mut);flex:none}
+.bar{display:flex;align-items:flex-end;gap:6px;margin:8px 14px 12px;padding:8px 8px 8px 20px;background:var(--pill);border:1px solid var(--line);border-radius:30px}
+textarea{flex:1;min-width:0;resize:none;border:0;outline:0;background:none;color:var(--fg);font:inherit;font-size:17px;line-height:1.4;padding:9px 0;max-height:140px}textarea::placeholder{color:var(--mut)}
+.bar button{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:none}#mic svg{width:26px;height:26px}#mic.on{color:var(--acc)}#go{background:var(--acc);color:#fff}#go svg{stroke-width:2.3}#go:disabled{opacity:.4;cursor:default}
+</style>
+</head>
+<body>
+<header><div class="pill">claht gpt</div><div class="hr">
+<button class="circ" id="kb" aria-label="API-ключ"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/></svg></button>
+<button class="circ" id="new" aria-label="Новий чат"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button></div></header>
+<div id="kp" hidden><div class="row"><input id="ki" type="password" autocomplete="off" placeholder="Anthropic API-ключ (sk-ant-…)" aria-label="Anthropic API-ключ"><button id="ks">Зберегти</button></div>
+<div class="kn">Ключ зберігається лише в цьому браузері й надсилається напряму до Anthropic. Не вводь чужі ключі. Використання API може бути платним і тарифікується Anthropic.</div></div>
+<button class="mem" id="mem"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>Пам’ять вимкнено<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v5M12 7.5v.5"/></svg></button>
+<div id="note" hidden>claht gpt не зберігає розмови: після оновлення сторінки чат очищується.</div><main id="chat"></main>
+<nav id="sg">
+<button data-p="Допоможи мені з кодом: "><svg viewBox="0 0 24 24"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg>Допомогти з кодом</button>
+<button data-p="Допоможи написати або відредагувати текст: "><svg viewBox="0 0 24 24"><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>Писати або редагувати</button>
+<button data-p="Поясни простими словами: "><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.3 1 2.1h5c0-.8.4-1.6 1-2.1A6 6 0 0012 3z"/></svg>Пояснити просто</button>
+<button data-p="Навчи мене: "><svg viewBox="0 0 24 24"><path d="M2 9l10-5 10 5-10 5zM6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>Навчитися чогось</button></nav>
+<div class="bar"><textarea id="in" rows="1" placeholder="Запитати claht gpt"></textarea>
+<button id="mic" hidden aria-label="Диктувати"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button><button id="go" aria-label="Надіслати"></button></div>
+<script>
+const $=s=>document.querySelector(s),chat=$("#chat"),ta=$("#in"),go=$("#go"),mic=$("#mic"),sg=$("#sg"),kp=$("#kp"),ki=$("#ki");
+const SYS="Ти — claht gpt, дружній ШІ-помічник у чаті. Відповідай мовою користувача, чітко й по суті.";
+const ARROW='<svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+const STOP='<svg viewBox="0 0 24 24" width="22" height="22"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></svg>';
+let hist=[],busy=false,ctl=null,key="";
+try{key=localStorage.getItem("claht_key")||""}catch(e){}
+kp.hidden=!!key;
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const md=t=>esc(t).split("```").map((p,i)=>i%2?"<pre><code>"+p.replace(/^[^\n]*\n/,"")+"</code></pre>":p.replace(/`([^`\n]+)`/g,"<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g,"<b>$1</b>").replace(/^\n+|\n+$/g,"")).join("");
+const scroll=()=>{chat.scrollTop=chat.scrollHeight},fit=()=>{ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px"};
+const upd=()=>{go.innerHTML=busy?STOP:ARROW;go.disabled=!busy&&!ta.value.trim()};
+function add(c,t){const e=document.createElement("div");e.className=c;if(c==="u")e.textContent=t;else e.innerHTML=md(t);chat.append(e);scroll();return e}
+async function send(){
+if(busy){ctl.abort();return}const t=ta.value.trim();if(!t)return;
+if(!key){kp.hidden=false;ki.focus();return}
+const h=hist;ta.value="";fit();sg.hidden=true;h.push({role:"user",content:t});add("u",t);
+const el=add("a wait",""),c=ctl=new AbortController();let last="";busy=true;upd();
+try{
+const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",signal:c.signal,headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-5-5",max_tokens:8192,stream:true,system:SYS,messages:h})});
+if(!r.ok){const j=await r.json().catch(()=>({}));throw{code:r.status,msg:j.error&&j.error.message}}
+const rd=r.body.getReader(),dec=new TextDecoder();let buf="";
+for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});const ls=buf.split("\n");buf=ls.pop();
+for(const l of ls){if(!l.startsWith("data:"))continue;try{const j=JSON.parse(l.slice(5));if(j.type==="content_block_delta"&&j.delta.text){last+=j.delta.text;el.classList.remove("wait");el.innerHTML=md(last);scroll()}}catch(_){}}}
+}catch(e){if(!c.signal.aborted)add("err",e.code===401?"Невірний API-ключ. Натисніть кнопку з ключем і вставте правильний.":e.code===429?"Ліміт запитів API вичерпано. Спробуйте пізніше.":(e.msg||"Не вдалося отримати відповідь. Перевірте ключ і з’єднання."))}
+el.classList.remove("wait");if(last){el.innerHTML=md(last);h.push({role:"assistant",content:last})}else{el.remove();h.pop()}
+busy=false;upd();
+}
+ta.oninput=()=>{fit();upd()};ta.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey&&matchMedia("(pointer:fine)").matches){e.preventDefault();send()}};
+go.onclick=send;$("#new").onclick=()=>{if(busy)ctl.abort();hist=[];chat.innerHTML="";sg.hidden=false;ta.value="";fit();upd()};
+$("#mem").onclick=()=>{$("#note").hidden=!$("#note").hidden};$("#kb").onclick=()=>{kp.hidden=!kp.hidden;if(!kp.hidden)ki.focus()};
+$("#ks").onclick=()=>{key=ki.value.trim();ki.value="";try{localStorage.setItem("claht_key",key)}catch(e){}kp.hidden=!!key};
+ki.onkeydown=e=>{if(e.key==="Enter")$("#ks").click()};sg.onclick=e=>{const b=e.target.closest("button");if(b){ta.value=b.dataset.p;fit();upd();ta.focus()}};
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SR){const r=new SR();r.lang="uk-UA";mic.hidden=false;r.onresult=e=>{ta.value+=(ta.value&&!/\s$/.test(ta.value)?" ":"")+e.results[0][0].transcript;fit();upd()};r.onend=()=>mic.classList.remove("on");mic.onclick=()=>{if(mic.classList.contains("on"))r.stop();else{mic.classList.add("on");try{r.start()}catch(e){mic.classList.remove("on")}}}}
+upd();
+</script></body></html>
