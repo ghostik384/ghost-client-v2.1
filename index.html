@@ -52,8 +52,7 @@ const SYS="Ти — claht gpt, дружній ШІ-помічник у чаті.
 const ARROW='<svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
 const STOP='<svg viewBox="0 0 24 24" width="22" height="22"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></svg>';
 let hist=[],busy=false,ctl=null,key="";
-try{key=localStorage.getItem("claht_key")||""}catch(e){}
-kp.hidden=!!key;
+kp.hidden=false;
 const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const md=t=>esc(t).split("```").map((p,i)=>i%2?"<pre><code>"+p.replace(/^[^\n]*\n/,"")+"</code></pre>":p.replace(/`([^`\n]+)`/g,"<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g,"<b>$1</b>").replace(/^\n+|\n+$/g,"")).join("");
 const scroll=()=>{chat.scrollTop=chat.scrollHeight},fit=()=>{ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px"};
@@ -77,7 +76,7 @@ busy=false;upd();
 ta.oninput=()=>{fit();upd()};ta.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey&&matchMedia("(pointer:fine)").matches){e.preventDefault();send()}};
 go.onclick=send;$("#new").onclick=()=>{if(busy)ctl.abort();hist=[];chat.innerHTML="";sg.hidden=false;ta.value="";fit();upd()};
 $("#mem").onclick=()=>{$("#note").hidden=!$("#note").hidden};$("#kb").onclick=()=>{kp.hidden=!kp.hidden;if(!kp.hidden)ki.focus()};
-$("#ks").onclick=()=>{key=ki.value.trim();ki.value="";try{localStorage.setItem("claht_key",key)}catch(e){}kp.hidden=!!key};
+$("#ks").onclick=()=>{key=ki.value.trim();ki.value="";kp.hidden=!!key};
 ki.onkeydown=e=>{if(e.key==="Enter")$("#ks").click()};sg.onclick=e=>{const b=e.target.closest("button");if(b){ta.value=b.dataset.p;fit();upd();ta.focus()}};
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SR){const r=new SR();r.lang="uk-UA";mic.hidden=false;r.onresult=e=>{ta.value+=(ta.value&&!/\s$/.test(ta.value)?" ":"")+e.results[0][0].transcript;fit();upd()};r.onend=()=>mic.classList.remove("on");mic.onclick=()=>{if(mic.classList.contains("on"))r.stop();else{mic.classList.add("on");try{r.start()}catch(e){mic.classList.remove("on")}}}}
